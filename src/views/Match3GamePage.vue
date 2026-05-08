@@ -1,0 +1,2041 @@
+<template>
+  <PhoneFrame :parallax="false">
+    <div ref="playRootRef" class="play">
+      <header class="play__top">
+        <div class="play__top-left">
+          <button
+            type="button"
+            class="play__back"
+            aria-label="В меню"
+            @click="exitToMenu"
+          >
+            <Icon icon="mdi:chevron-left" />
+          </button>
+          <button
+            type="button"
+            class="play__back"
+            :disabled="status !== 'playing'"
+            aria-label="Пауза"
+            @click="openPause"
+          >
+            <Icon icon="mdi:pause" />
+          </button>
+        </div>
+        <div class="play__lvl">
+          Уровень <strong>{{ levelId }}</strong>
+        </div>
+        <div class="play__top-stats">
+          <span
+            ref="movesPillRef"
+            class="m3-top-pill play__top-pill"
+            :class="{ 'play__top-pill--low': movesLeft <= 3 }"
+            :title="`Ходы: ${movesLeft}`"
+          >
+            <span class="m3-top-pill__icon m3-top-pill__icon--energy" aria-hidden="true">
+              <Icon icon="mdi:foot-print" />
+            </span>
+            {{ movesLeft }}
+          </span>
+          <span
+            ref="scoreTargetRef"
+            class="m3-top-pill play__top-pill"
+            :title="`Очки: ${score}`"
+          >
+            <span class="m3-top-pill__icon m3-top-pill__icon--star" aria-hidden="true">
+              <Icon icon="mdi:star" />
+            </span>
+            {{ score }}
+          </span>
+        </div>
+      </header>
+
+      <section class="play__hud">
+        <div
+          ref="goalsCardRef"
+          class="play__hud-card play__hud-card--goals"
+          :class="{ 'play__hud-card--booster-mode': boosterNeedsBoardTap }"
+        >
+          <div
+            v-if="boosterNeedsBoardTap"
+            class="play__goals-booster-hint"
+            role="status"
+            aria-live="polite"
+          >
+            <p class="play__goals-booster-hint-text">
+              {{ boosterAimHintText }}
+            </p>
+          </div>
+          <div v-else class="play__goals-stack">
+            <div class="play__goals-top">
+              <span class="play__hud-label play__hud-label--goals-title">Цели</span>
+              <div
+                class="play__goals-row"
+                :class="{ 'play__goals-row--spread': stoneProgress.target > 0 }"
+                role="list"
+              >
+                <div
+                  v-if="stoneProgress.target > 0"
+                  class="play__goal-item"
+                  role="listitem"
+                  title="Камни"
+                >
+                  <img
+                    v-if="stoneGoalIconUrl"
+                    :src="stoneGoalIconUrl"
+                    class="play__goal-icon play__goal-icon--stone-img"
+                    alt=""
+                    aria-hidden="true"
+                    draggable="false"
+                  />
+                  <span class="play__goal-count">
+                    {{ stoneProgress.broken }} / {{ stoneProgress.target }}
+                  </span>
+                </div>
+                <div
+                  class="play__goal-item"
+                  role="listitem"
+                  title="Цель уровня"
+                >
+                  <img
+                    v-if="objective?.type === 'collect' && collectGoalIconUrl"
+                    class="play__chip play__chip--goal-inline"
+                    :src="collectGoalIconUrl"
+                    alt=""
+                    aria-hidden="true"
+                    draggable="false"
+                  />
+                  <span v-else-if="objective?.type === 'score'" aria-hidden="true">
+                    <Icon icon="mdi:star" class="play__goal-icon play__goal-icon--score" />
+                  </span>
+                  <span class="play__goal-count">{{ progressText }}</span>
+                </div>
+              </div>
+            </div>
+            <div
+              class="play__goals-bar"
+              role="progressbar"
+              :aria-valuenow="combinedGoalsPercent"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              :aria-label="`Общий прогресс целей: ${combinedGoalsPercent}%`"
+            >
+              <div
+                class="play__goals-bar-fill"
+                :style="{ width: `${combinedGoalsPercent}%` }"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="play__board-wrap">
+        <Match3Board
+          v-if="board.length"
+          ref="boardRef"
+          :board="board"
+          :stone-hp="stoneHp"
+          :selected="selected"
+          :matched-keys="matchedKeys"
+          :spawned-keys="spawnedKeys"
+          :disabled="isBusy || status !== 'playing' || paused || tutorialBoardLocked"
+          :hint-cell-key="hintCellKey"
+          :tutorial-from-key="tutorialCellFromKey"
+          :tutorial-to-key="tutorialCellToKey"
+          :booster-aim="boosterNeedsBoardTap"
+          @tap="onTap"
+          @swipe="onSwipe"
+        />
+      </section>
+
+      <div
+        v-if="tutorialActive && !tutorialHudTourActive"
+        class="m3-tutorial"
+        :class="{ 'm3-tutorial--swap': tutorialStep === 'swap' }"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Обучение"
+        @pointerdown.stop
+        @click.stop
+      >
+        <div v-if="tutorialHole1Style" class="m3-tutorial__hole" :style="tutorialHole1Style" />
+        <div v-if="tutorialHole2Style" class="m3-tutorial__hole" :style="tutorialHole2Style" />
+        <div
+          v-if="tutorialFromStyle"
+          class="m3-tutorial__ring m3-tutorial__ring--from"
+          :style="tutorialFromStyle"
+          aria-hidden="true"
+        />
+        <div
+          v-if="tutorialToStyle"
+          class="m3-tutorial__ring m3-tutorial__ring--to"
+          :style="tutorialToStyle"
+          aria-hidden="true"
+        />
+        <div
+          v-if="tutorialArrowStyle"
+          class="m3-tutorial__swipe"
+          :style="tutorialArrowStyle"
+          aria-hidden="true"
+        >
+          <div class="m3-tutorial__swipe-line" />
+          <div class="m3-tutorial__swipe-head" />
+        </div>
+
+        <!-- HUD-часть обучения ведёт Driver.js -->
+      </div>
+
+      <div ref="boostRowRef" class="play__boost-row" role="toolbar" aria-label="Усилители">
+        <button
+          type="button"
+          class="play__boost-btn"
+          :class="{ 'play__boost-btn--on': boosterPick === 'bomb' }"
+          :disabled="boostBarDisabled"
+          :title="
+            boosterBomb > 0
+              ? 'Взрыв 3×3 — нажмите и выберите клетку'
+              : 'Посмотреть рекламу и получить бустер'
+          "
+          :aria-label="
+            boosterBomb > 0
+              ? 'Бомба, зарядов ' + boosterBomb
+              : 'Бомба закончилась — получить за рекламу'
+          "
+          @click="selectBooster('bomb')"
+        >
+          <span v-if="boosterBomb > 0" class="play__boost-count">{{ boosterBomb }}</span>
+          <Icon
+            v-else
+            icon="mdi:movie-open-play"
+            class="play__boost-ad-ico"
+            aria-hidden="true"
+          />
+          <img
+            v-if="boosterIconBomb"
+            :src="boosterIconBomb"
+            class="play__boost-ico"
+            alt=""
+            draggable="false"
+          />
+        </button>
+        <button
+          type="button"
+          class="play__boost-btn"
+          :disabled="boostBarDisabled"
+          :title="
+            boosterClock > 0
+              ? 'Время — откат хода или доп. ходы'
+              : 'Посмотреть рекламу и получить бустер'
+          "
+          :aria-label="
+            boosterClock > 0
+              ? 'Время, зарядов ' + boosterClock
+              : 'Время закончилось — получить за рекламу'
+          "
+          @click="selectBooster('clock')"
+        >
+          <span v-if="boosterClock > 0" class="play__boost-count">{{ boosterClock }}</span>
+          <Icon
+            v-else
+            icon="mdi:movie-open-play"
+            class="play__boost-ad-ico"
+            aria-hidden="true"
+          />
+          <img
+            v-if="boosterIconClock"
+            :src="boosterIconClock"
+            class="play__boost-ico"
+            alt=""
+            draggable="false"
+          />
+        </button>
+        <button
+          type="button"
+          class="play__boost-btn"
+          :class="{ 'play__boost-btn--on': boosterPick === 'star' }"
+          :disabled="boostBarDisabled"
+          :title="
+            boosterStar > 0
+              ? 'Убрать все фишки цвета — нажмите и выберите клетку'
+              : 'Посмотреть рекламу и получить бустер'
+          "
+          :aria-label="
+            boosterStar > 0
+              ? 'Звезда, зарядов ' + boosterStar
+              : 'Звезда закончилась — получить за рекламу'
+          "
+          @click="selectBooster('star')"
+        >
+          <span v-if="boosterStar > 0" class="play__boost-count">{{ boosterStar }}</span>
+          <Icon
+            v-else
+            icon="mdi:movie-open-play"
+            class="play__boost-ad-ico"
+            aria-hidden="true"
+          />
+          <img
+            v-if="boosterIconStar"
+            :src="boosterIconStar"
+            class="play__boost-ico"
+            alt=""
+            draggable="false"
+          />
+        </button>
+        <button
+          type="button"
+          class="play__boost-btn play__boost-btn--ad"
+          :disabled="boostBarDisabled"
+          title="Реклама — после просмотра +5 ходов"
+          aria-label="Посмотреть рекламу за дополнительные ходы"
+          @click="watchRewardedForMoves"
+        >
+          <Icon
+            icon="mdi:movie-open-play"
+            class="play__boost-ico play__boost-ico--svg"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+
+      <div class="play__fly-layer" aria-hidden="true">
+        <div
+          v-for="c in flyCoins"
+          :key="c.id"
+          class="play__fly-coin"
+          :style="{
+            left: `${c.x0}px`,
+            top: `${c.y0}px`,
+            '--dx': `${c.x1 - c.x0}px`,
+            '--dy': `${c.y1 - c.y0}px`,
+            animationDelay: `${c.delay}ms`,
+          }"
+        >
+          <Icon icon="mdi:cash" class="play__fly-coin__icon" />
+        </div>
+      </div>
+
+      <footer class="play__foot">
+        <p v-if="status === 'won'" class="play__hint play__hint--ok">
+          Уровень пройден!
+        </p>
+      </footer>
+
+      <div
+        v-if="paused && status === 'playing'"
+        class="m3-modal-overlay play__pause-scrim"
+        role="presentation"
+      >
+        <div
+          class="m3-modal-panel play__pause-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="play-pause-title"
+          @click.stop
+        >
+          <span id="play-pause-title" class="m3-ribbon play__pause-ribbon">
+            <span class="m3-ribbon__line">Пауза</span>
+          </span>
+          <p class="play__pause-sub">Уровень {{ levelId }}</p>
+          <div class="m3-modal-actions play__pause-actions">
+            <button
+              type="button"
+              class="m3-round-icon-btn"
+              aria-label="В меню"
+              @click="exitFromPauseToMenu"
+            >
+              <Icon icon="mdi:menu" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="m3-round-icon-btn m3-round-icon-btn--green"
+              aria-label="Продолжить игру"
+              @click="closePause"
+            >
+              <Icon icon="mdi:play" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="lossModalVisible && status === 'lost'"
+        class="m3-modal-overlay play__loss-scrim"
+        role="presentation"
+      >
+        <div
+          class="m3-modal-panel play__loss-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="play-loss-title"
+          @click.stop
+        >
+          <span id="play-loss-title" class="m3-ribbon play__loss-ribbon">
+            <span class="m3-ribbon__line">Ходы закончились</span>
+          </span>
+          <p class="play__loss-lead">
+            Посмотрите рекламу и получите
+            <strong>+{{ REWARD_MOVES_FROM_AD }} ходов</strong>, чтобы продолжить уровень.
+          </p>
+          <MenuActionButton
+            variant="hero"
+            class="play__loss-ad-btn"
+            :disabled="lossAdBusy"
+            @click="watchAdContinueAfterLoss"
+          >
+            Реклама · +{{ REWARD_MOVES_FROM_AD }} ходов
+          </MenuActionButton>
+          <button
+            type="button"
+            class="play__loss-skip"
+            :disabled="lossAdBusy"
+            @click="finishLossToResult"
+          >
+            К результату без продолжения
+          </button>
+        </div>
+      </div>
+    </div>
+  </PhoneFrame>
+</template>
+
+<script setup>
+defineOptions({ name: 'Match3GamePage' })
+
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
+import { storeToRefs } from 'pinia'
+import { useRoute, useRouter } from 'vue-router'
+import PhoneFrame from '@/components/PhoneFrame.vue'
+import Match3Board from '@/components/match3/Match3Board.vue'
+import MenuActionButton from '@/components/MenuActionButton.vue'
+import { Icon } from '@iconify/vue'
+import { driver } from 'driver.js'
+import 'driver.js/dist/driver.css'
+import { getBoardChipIconUrl, getBoosterIconUrl, getStoneIconUrl } from '@/game/chipIcons.js'
+import { findHintSwap } from '@/game/match3Engine.js'
+import { getColor } from '@/stores/match3Game'
+import { useMatch3GameStore } from '@/stores/match3Game'
+import { useMatch3ProgressStore } from '@/stores/match3Progress'
+import { useYandexGamesStore } from '@/stores/yandexGames'
+import { useAudioSettingsStore } from '@/stores/audioSettings'
+import {
+  playBoardMatchBreakSfx,
+  playGameOverSfx,
+  playSuccessSfx,
+} from '@/audio/boardEffects.js'
+import {
+  pauseBackgroundMusic,
+  playBackgroundMusic,
+  resumeBackgroundMusicFromUserGesture,
+} from '@/audio/backgroundMusic.js'
+
+const route = useRoute()
+const router = useRouter()
+const game = useMatch3GameStore()
+const progress = useMatch3ProgressStore()
+const yandexGames = useYandexGamesStore()
+const audioSettings = useAudioSettingsStore()
+
+const boardRef = ref(null)
+const playRootRef = ref(null)
+const goalsCardRef = ref(null)
+const movesPillRef = ref(null)
+const boostRowRef = ref(null)
+const scoreTargetRef = ref(null)
+/** @type {import('vue').Ref<{ id: number, x0: number, y0: number, x1: number, y1: number, delay: number }[]>} */
+const flyCoins = ref([])
+let flyCoinSeq = 0
+
+const paused = ref(false)
+
+const {
+  board,
+  stoneHp,
+  selected,
+  score,
+  movesLeft,
+  status,
+  stars,
+  coinsEarned,
+  objective,
+  config,
+  matchedKeys,
+  spawnedKeys,
+  isBusy,
+  stoneProgress,
+  boosterBomb,
+  boosterClock,
+  boosterStar,
+  lastUserSwap,
+} = storeToRefs(game)
+
+const tutorialActive = computed(() => progress.needsTutorial && levelId.value === 1)
+const tutorialExpected = { r: 2, c: 1, dr: 0, dc: 1 }
+
+const tutorialHudTourActive = ref(false)
+const tutorialSwapTourActive = ref(false)
+const tutorialStep = ref(/** @type {'swap'} */ ('swap'))
+const tutorialBoardLocked = computed(() => tutorialActive.value && (tutorialHudTourActive.value || tutorialStep.value !== 'swap'))
+
+const tutorialCellFromKey = computed(() =>
+  tutorialActive.value && tutorialStep.value === 'swap'
+    ? `${tutorialExpected.r},${tutorialExpected.c}`
+    : '',
+)
+const tutorialCellToKey = computed(() =>
+  tutorialActive.value && tutorialStep.value === 'swap'
+    ? `${tutorialExpected.r + tutorialExpected.dr},${tutorialExpected.c + tutorialExpected.dc}`
+    : '',
+)
+
+const tutorialFromStyle = ref(null)
+const tutorialToStyle = ref(null)
+const tutorialHintStyle = ref(null)
+const tutorialArrowStyle = ref(null)
+const tutorialHole1Style = ref(null)
+const tutorialHole2Style = ref(null)
+let hudTour = null
+let swapTour = null
+
+function startHudTourIfNeeded() {
+  if (!tutorialActive.value) return
+  if (tutorialHudTourActive.value) return
+  // На всякий случай: не держим одновременно 2 тура.
+  try {
+    swapTour?.destroy?.()
+  } catch {
+    /* ignore */
+  }
+  swapTour = null
+  tutorialSwapTourActive.value = false
+
+  const goalsEl = goalsCardRef.value
+  const movesEl = movesPillRef.value
+  const boostEl = boostRowRef.value
+  if (!goalsEl || !movesEl || !boostEl) return
+
+  tutorialHudTourActive.value = true
+  hudTour = driver({
+    allowClose: false,
+    showProgress: false,
+    disableActiveInteraction: true,
+    overlayOpacity: 0.22,
+    stagePadding: 10,
+    nextBtnText: 'Далее',
+    prevBtnText: 'Назад',
+    doneBtnText: 'Начать',
+    onDestroyed: () => {
+      tutorialHudTourActive.value = false
+      hudTour = null
+      // После HUD-тура включаем шаг свайпа.
+      void nextTick(() => startSwapTourIfNeeded())
+      void updateTutorialUi()
+    },
+  })
+
+  hudTour.setSteps([
+    {
+      element: goalsEl,
+      popover: {
+        title: 'Цели',
+        description: 'Смотри, что нужно сделать на уровне.',
+        side: 'bottom',
+        align: 'center',
+      },
+    },
+    {
+      element: movesEl,
+      popover: {
+        title: 'Ходы',
+        description: 'Количество ходов ограничено.',
+        side: 'bottom',
+        align: 'center',
+      },
+    },
+    {
+      element: boostEl,
+      popover: {
+        title: 'Усилители',
+        description:
+          'Нажми на усилитель, затем выбери клетку на поле.\n' +
+          'Бомба — взрыв 3×3. Звезда — убирает все фишки выбранного цвета.\n' +
+          'Часы — откат хода или +ходы, если откатывать нечего.',
+        side: 'top',
+        align: 'center',
+      },
+    },
+  ])
+
+  hudTour.drive()
+}
+
+function startSwapTourIfNeeded() {
+  if (!tutorialActive.value) return
+  if (tutorialSwapTourActive.value) return
+  if (tutorialHudTourActive.value) return
+  const board = boardRef.value
+  const fromKey = `${tutorialExpected.r},${tutorialExpected.c}`
+  // element должен существовать в DOM (ищем внутри фрейма)
+  const root = playRootRef.value
+  const el = root?.querySelector?.(`[data-m3-cell="${fromKey}"]`)
+  if (!el) return
+
+  tutorialSwapTourActive.value = true
+  swapTour = driver({
+    allowClose: false,
+    showProgress: false,
+    showButtons: ['done'],
+    disableActiveInteraction: false,
+    overlayOpacity: 0.14,
+    stagePadding: 8,
+    prevBtnText: 'Назад',
+    doneBtnText: 'Понял',
+    onDestroyed: () => {
+      tutorialSwapTourActive.value = false
+      swapTour = null
+    },
+  })
+
+  swapTour.setSteps([
+    {
+      element: el,
+      popover: {
+        title: 'Свайп',
+        description: 'Проведи фишку вправо, чтобы собрать тройку.',
+        side: 'bottom',
+        align: 'center',
+      },
+    },
+  ])
+  swapTour.drive()
+}
+
+async function updateTutorialUi() {
+  if (!tutorialActive.value) {
+    tutorialFromStyle.value = null
+    tutorialToStyle.value = null
+    tutorialHintStyle.value = null
+    tutorialArrowStyle.value = null
+    tutorialHole1Style.value = null
+    tutorialHole2Style.value = null
+    return
+  }
+  await nextTick()
+  const b = boardRef.value
+  if (!b?.getCellCenterScreen) return
+  const root = playRootRef.value
+  const rootRect = root?.getBoundingClientRect?.()
+  if (!rootRect) return
+  // Сброс
+  tutorialFromStyle.value = null
+  tutorialToStyle.value = null
+  tutorialArrowStyle.value = null
+  tutorialHole1Style.value = null
+  tutorialHole2Style.value = null
+  // Пока идёт HUD-тур (Driver.js) — наш оверлей по клеткам не показываем.
+  if (tutorialHudTourActive.value) return
+
+  function ringFromRect(rect, scale = 1.05) {
+    const cx = rect.left + rect.width / 2 - rootRect.left
+    const cy = rect.top + rect.height / 2 - rootRect.top
+    const s = Math.max(rect.width, rect.height) * scale
+    const left = cx - s / 2
+    const top = cy - s / 2
+    return {
+      style: {
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${s}px`,
+        height: `${s}px`,
+      },
+      cx,
+      cy,
+      s,
+      left,
+      top,
+    }
+  }
+  function holeFromRing(ring, inset = 6) {
+    if (!ring) return null
+    const left = ring.left + inset
+    const top = ring.top + inset
+    const w = Math.max(0, ring.s - inset * 2)
+    const h = Math.max(0, ring.s - inset * 2)
+    return { left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${h}px` }
+  }
+
+  // swap step
+  const from = b.getCellCenterScreen(tutorialExpected.r, tutorialExpected.c)
+  const to = b.getCellCenterScreen(
+    tutorialExpected.r + tutorialExpected.dr,
+    tutorialExpected.c + tutorialExpected.dc,
+  )
+  if (!from || !to) return
+  const fx = from.x - rootRect.left
+  const fy = from.y - rootRect.top
+  const tx = to.x - rootRect.left
+  const ty = to.y - rootRect.top
+  const ringSize = Math.max(from.w, from.h) * 0.92
+  const dx = tx - fx
+  const dy = ty - fy
+  const len = Math.max(18, Math.hypot(dx, dy) - ringSize * 0.55)
+  const ang = Math.atan2(dy, dx) * (180 / Math.PI)
+  tutorialArrowStyle.value = {
+    left: `${fx}px`,
+    top: `${fy}px`,
+    width: `${len}px`,
+    transform: `translateY(-50%) rotate(${ang}deg)`,
+    transformOrigin: '0 50%',
+  }
+  tutorialFromStyle.value = {
+    left: `${fx - ringSize / 2}px`,
+    top: `${fy - ringSize / 2}px`,
+    width: `${ringSize}px`,
+    height: `${ringSize}px`,
+  }
+  tutorialToStyle.value = {
+    left: `${tx - ringSize / 2}px`,
+    top: `${ty - ringSize / 2}px`,
+    width: `${ringSize}px`,
+    height: `${ringSize}px`,
+  }
+  // Для swap считаем hole напрямую (без parseFloat), чтобы не было “полос”.
+  tutorialHole1Style.value = {
+    left: `${fx - ringSize / 2 + 8}px`,
+    top: `${fy - ringSize / 2 + 8}px`,
+    width: `${Math.max(0, ringSize - 16)}px`,
+    height: `${Math.max(0, ringSize - 16)}px`,
+  }
+  tutorialHole2Style.value = {
+    left: `${tx - ringSize / 2 + 8}px`,
+    top: `${ty - ringSize / 2 + 8}px`,
+    width: `${Math.max(0, ringSize - 16)}px`,
+    height: `${Math.max(0, ringSize - 16)}px`,
+  }
+}
+
+const boosterIconBomb = computed(() => getBoosterIconUrl('bomb'))
+const boosterIconClock = computed(() => getBoosterIconUrl('clock'))
+const boosterIconStar = computed(() => getBoosterIconUrl('star'))
+const stoneGoalIconUrl = computed(() => getStoneIconUrl())
+
+/** Выбор бомбы/звезды — следующий тап по полю применяет бустер */
+const boosterPick = ref(/** @type {null | 'bomb' | 'star'} */ (null))
+/** Ожидаем тап по клетке для бомбы/звезды — подсветка поля и подсказка */
+const boosterNeedsBoardTap = computed(
+  () => boosterPick.value === 'bomb' || boosterPick.value === 'star',
+)
+const boosterAimHintText = computed(() => {
+  if (boosterPick.value === 'bomb') return 'Нажмите на клетку — взрыв 3×3'
+  if (boosterPick.value === 'star') return 'Нажмите на фишку — уберётся весь цвет'
+  return ''
+})
+/** Пока открыта rewarded — блокируем повторный тап */
+const rewardAdBusy = ref(false)
+
+const boostBarDisabled = computed(
+  () =>
+    status.value !== 'playing' ||
+    paused.value ||
+    isBusy.value ||
+    rewardAdBusy.value ||
+    tutorialActive.value,
+)
+
+/** Ходы за просмотр rewarded (Яндекс.Игры). */
+const REWARD_MOVES_FROM_AD = 5
+
+const lossModalVisible = ref(false)
+const lossAdBusy = ref(false)
+
+/** Подсказка: после 30 с бездействия — ключ ячейки "r,c" для покачивания фишки. */
+const HINT_IDLE_MS = 30_000
+const hintCellKey = ref('')
+let idleHintTimer = 0
+
+function clearIdleHintTimer() {
+  if (idleHintTimer) {
+    clearTimeout(idleHintTimer)
+    idleHintTimer = 0
+  }
+}
+
+function scheduleIdleHint() {
+  clearIdleHintTimer()
+  hintCellKey.value = ''
+  if (status.value !== 'playing' || paused.value || isBusy.value) return
+  idleHintTimer = window.setTimeout(() => {
+    idleHintTimer = 0
+    if (status.value !== 'playing' || paused.value || isBusy.value) return
+    const hint = findHintSwap(board.value)
+    hintCellKey.value = hint ? `${hint.from.r},${hint.from.c}` : ''
+  }, HINT_IDLE_MS)
+}
+
+function bumpUserActivity() {
+  scheduleIdleHint()
+}
+
+function resumeBgmAfterClosingPause() {
+  if (audioSettings.effectiveMusicVolume <= 0) return
+  void playBackgroundMusic().catch(() => {})
+}
+
+/** После кнопки «Продолжить» / выхода из паузы — тот же стек жеста, что и click. */
+function resumeBgmFromUserGesture() {
+  if (audioSettings.effectiveMusicVolume <= 0) return
+  resumeBackgroundMusicFromUserGesture()
+}
+
+function tryBgmOnBoardInteraction() {
+  if (audioSettings.effectiveMusicVolume <= 0) return
+  resumeBackgroundMusicFromUserGesture()
+}
+
+function openPause() {
+  if (status.value !== 'playing') return
+  paused.value = true
+  pauseBackgroundMusic()
+}
+
+function closePause() {
+  if (!paused.value) return
+  paused.value = false
+  resumeBgmFromUserGesture()
+}
+
+async function exitFromPauseToMenu() {
+  paused.value = false
+  resumeBgmFromUserGesture()
+  await exitToMenu()
+}
+
+function onPauseKeydown(ev) {
+  if (ev.key !== 'Escape' || !paused.value) return
+  ev.preventDefault()
+  closePause()
+}
+
+const levelId = computed(() => parseInt(route.params.id, 10) || 1)
+
+const progressText = computed(() => {
+  if (!objective.value) return ''
+  const p = game.objectiveProgress
+  const t = p.target
+  const shown = t > 0 ? Math.min(p.current, t) : p.current
+  return `${shown} / ${t}`
+})
+
+/** Средний прогресс по целям (камни + основная) для общей полосы. */
+const combinedGoalsProgress = computed(() => {
+  const main = game.objectiveProgress.ratio
+  const st = game.stoneProgress
+  if (st.target <= 0) return Math.min(1, Math.max(0, main))
+  const avg = (st.ratio + main) / 2
+  return Math.min(1, Math.max(0, avg))
+})
+
+const combinedGoalsPercent = computed(() =>
+  Math.round(combinedGoalsProgress.value * 100),
+)
+
+function spawnScoreFlyCoins(keySet) {
+  if (!keySet || keySet.size === 0) return
+  void nextTick(() => {
+    const board = boardRef.value
+    const scoreEl = scoreTargetRef.value
+    if (!board?.getMatchCentroidScreen || !scoreEl) return
+    const start = board.getMatchCentroidScreen(keySet)
+    if (!start) return
+    const tr = scoreEl.getBoundingClientRect()
+    const x1 = tr.left + tr.width / 2
+    const y1 = tr.top + tr.height / 2
+    const n = Math.min(4, Math.max(1, Math.ceil(keySet.size / 3)))
+    const jitter = 14
+    const batch = []
+    for (let i = 0; i < n; i += 1) {
+      batch.push({
+        id: ++flyCoinSeq,
+        x0: start.x + (Math.random() - 0.5) * jitter,
+        y0: start.y + (Math.random() - 0.5) * jitter,
+        x1,
+        y1,
+        delay: i * 50,
+      })
+    }
+    flyCoins.value = [...flyCoins.value, ...batch]
+    window.setTimeout(() => {
+      const ids = new Set(batch.map((b) => b.id))
+      flyCoins.value = flyCoins.value.filter((c) => !ids.has(c.id))
+    }, 800)
+  })
+}
+
+watch(
+  matchedKeys,
+  (keys) => {
+    if (status.value !== 'playing') return
+    if (keys && keys.size > 0) {
+      playBoardMatchBreakSfx(audioSettings.effectiveSfxVolume)
+      spawnScoreFlyCoins(keys)
+    }
+  },
+  { flush: 'post' },
+)
+
+const collectGoalIconUrl = computed(() => {
+  if (objective.value?.type !== 'collect') return null
+  const targetColor = objective.value.color
+  // Показываем иконку только если такой цвет реально присутствует на доске.
+  for (const row of board.value) {
+    for (const v of row) {
+      if (getColor(v) === targetColor) return getBoardChipIconUrl(targetColor)
+    }
+  }
+  return null
+})
+
+// Для цели «очки» показываем одну понятную иконку (а не набор фишек, который путает).
+
+onMounted(() => {
+  window.addEventListener('keydown', onPauseKeydown)
+  game.startLevel(levelId.value, { tutorial: tutorialActive.value })
+  yandexGames.notifyGameplayStart()
+  void yandexGames.showStickyBannerAdv()
+  scheduleIdleHint()
+  if (tutorialActive.value) {
+    tutorialStep.value = 'swap'
+    void nextTick(() => startHudTourIfNeeded())
+  }
+  void updateTutorialUi()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onPauseKeydown)
+  clearIdleHintTimer()
+  hintCellKey.value = ''
+  paused.value = false
+  resumeBgmAfterClosingPause()
+  yandexGames.notifyGameplayStop()
+  void yandexGames.hideStickyBannerAdv()
+})
+
+watch(
+  () => route.params.id,
+  (id) => {
+    paused.value = false
+    boosterPick.value = null
+    lossModalVisible.value = false
+    resumeBgmAfterClosingPause()
+    const n = parseInt(id, 10) || 1
+    game.startLevel(n, { tutorial: tutorialActive.value && n === 1 })
+    bumpUserActivity()
+    if (tutorialActive.value && n === 1) {
+      tutorialStep.value = 'swap'
+      void nextTick(() => startHudTourIfNeeded())
+    }
+    void updateTutorialUi()
+  },
+)
+
+watch(status, (s) => {
+  if (s !== 'playing') {
+    paused.value = false
+    resumeBgmAfterClosingPause()
+    clearIdleHintTimer()
+    hintCellKey.value = ''
+  }
+})
+
+watch(isBusy, (busy) => {
+  if (busy) {
+    clearIdleHintTimer()
+    hintCellKey.value = ''
+  } else {
+    scheduleIdleHint()
+  }
+})
+
+watch(
+  tutorialActive,
+  () => {
+    void updateTutorialUi()
+  },
+  { flush: 'post' },
+)
+
+watch(
+  [tutorialActive, goalsCardRef, movesPillRef, boostRowRef],
+  () => {
+    if (tutorialActive.value) {
+      void nextTick(() => startHudTourIfNeeded())
+    }
+  },
+  { flush: 'post' },
+)
+
+watch(
+  board,
+  () => {
+    // Чтобы окно не "шаталось" от каскадов/перерисовок,
+    // обновляем позицию только на шаге свайпа (когда завязано на клетки).
+    if (tutorialActive.value && tutorialStep.value === 'swap') {
+      void updateTutorialUi()
+    }
+  },
+  { flush: 'post' },
+)
+
+watch(
+  lastUserSwap,
+  (s) => {
+    if (!tutorialActive.value || !s) return
+    const ok =
+      (s.a.r === tutorialExpected.r &&
+        s.a.c === tutorialExpected.c &&
+        s.b.r === tutorialExpected.r + tutorialExpected.dr &&
+        s.b.c === tutorialExpected.c + tutorialExpected.dc) ||
+      (s.b.r === tutorialExpected.r &&
+        s.b.c === tutorialExpected.c &&
+        s.a.r === tutorialExpected.r + tutorialExpected.dr &&
+        s.a.c === tutorialExpected.c + tutorialExpected.dc)
+    if (ok) {
+      try {
+        swapTour?.destroy?.()
+      } catch {
+        /* ignore */
+      }
+      progress.markTutorialDone()
+    }
+  },
+  { flush: 'post' },
+)
+
+watch(paused, (p) => {
+  if (p) {
+    clearIdleHintTimer()
+    hintCellKey.value = ''
+    boosterPick.value = null
+  } else if (status.value === 'playing') {
+    scheduleIdleHint()
+  }
+})
+
+watch(status, async (s) => {
+  if (s !== 'won' && s !== 'lost') return
+  if (s === 'lost') {
+    playGameOverSfx(audioSettings.effectiveSfxVolume)
+    lossModalVisible.value = true
+    return
+  }
+  playSuccessSfx(audioSettings.effectiveSfxVolume)
+  await new Promise((r) => setTimeout(r, 700))
+  yandexGames.notifyGameplayStop()
+  await yandexGames.hideStickyBannerAdv()
+  await yandexGames.showFullscreenAdv({ resumeAudioAfterClose: false })
+  router.replace({
+    name: 'result',
+    query: {
+      level: String(levelId.value),
+      stars: String(stars.value),
+      score: String(score.value),
+      coins: String(coinsEarned.value),
+      result: s,
+    },
+  })
+})
+
+async function finishLossToResult() {
+  lossModalVisible.value = false
+  await new Promise((r) => setTimeout(r, 280))
+  yandexGames.notifyGameplayStop()
+  await yandexGames.hideStickyBannerAdv()
+  await yandexGames.showFullscreenAdv({ resumeAudioAfterClose: false })
+  router.replace({
+    name: 'result',
+    query: {
+      level: String(levelId.value),
+      stars: String(stars.value),
+      score: String(score.value),
+      coins: String(coinsEarned.value),
+      result: 'lost',
+    },
+  })
+}
+
+async function watchAdContinueAfterLoss() {
+  if (
+    status.value !== 'lost' ||
+    lossAdBusy.value ||
+    !lossModalVisible.value
+  ) {
+    return
+  }
+  lossAdBusy.value = true
+  boosterPick.value = null
+  tryBgmOnBoardInteraction()
+  try {
+    const res = await yandexGames.showRewardedVideo()
+    if (res.rewarded && game.resumeAfterLossWithMoves(REWARD_MOVES_FROM_AD)) {
+      lossModalVisible.value = false
+      yandexGames.notifyGameplayStart()
+      resumeBgmFromUserGesture()
+      bumpUserActivity()
+    }
+  } finally {
+    lossAdBusy.value = false
+  }
+}
+
+async function watchRewardedForBooster(
+  /** @type {'bomb' | 'clock' | 'star'} */ kind,
+) {
+  if (
+    status.value !== 'playing' ||
+    paused.value ||
+    isBusy.value ||
+    rewardAdBusy.value
+  ) {
+    return
+  }
+  rewardAdBusy.value = true
+  boosterPick.value = null
+  tryBgmOnBoardInteraction()
+  try {
+    const res = await yandexGames.showRewardedVideo()
+    if (res.rewarded) {
+      game.grantBoosterFromRewardAd(kind)
+      bumpUserActivity()
+    }
+  } finally {
+    rewardAdBusy.value = false
+  }
+}
+
+function selectBooster(kind) {
+  if (
+    status.value !== 'playing' ||
+    paused.value ||
+    isBusy.value ||
+    rewardAdBusy.value
+  ) {
+    return
+  }
+  if (kind === 'bomb' && boosterBomb.value <= 0) {
+    watchRewardedForBooster('bomb')
+    return
+  }
+  if (kind === 'clock' && boosterClock.value <= 0) {
+    watchRewardedForBooster('clock')
+    return
+  }
+  if (kind === 'star' && boosterStar.value <= 0) {
+    watchRewardedForBooster('star')
+    return
+  }
+  if (kind === 'clock') {
+    game.useClockBooster()
+    boosterPick.value = null
+    bumpUserActivity()
+    return
+  }
+  boosterPick.value = boosterPick.value === kind ? null : kind
+}
+
+async function watchRewardedForMoves() {
+  if (status.value !== 'playing' || paused.value || isBusy.value || rewardAdBusy.value) {
+    return
+  }
+  rewardAdBusy.value = true
+  boosterPick.value = null
+  tryBgmOnBoardInteraction()
+  try {
+    const res = await yandexGames.showRewardedVideo()
+    if (res.rewarded) {
+      game.grantBonusMoves(REWARD_MOVES_FROM_AD)
+      bumpUserActivity()
+    }
+  } finally {
+    rewardAdBusy.value = false
+  }
+}
+
+async function onTap(payload) {
+  tryBgmOnBoardInteraction()
+  bumpUserActivity()
+  if (tutorialActive.value) return
+  if (boosterPick.value === 'bomb') {
+    if (boosterBomb.value > 0) {
+      await game.applyBombBooster(payload.r, payload.c)
+      boosterPick.value = null
+    }
+    return
+  }
+  if (boosterPick.value === 'star') {
+    if (boosterStar.value > 0) {
+      await game.applyStarBooster(payload.r, payload.c)
+      boosterPick.value = null
+    }
+    return
+  }
+  await game.tapCell(payload.r, payload.c)
+}
+async function onSwipe(payload) {
+  boosterPick.value = null
+  tryBgmOnBoardInteraction()
+  bumpUserActivity()
+  if (tutorialActive.value) {
+    if (tutorialStep.value !== 'swap') return
+    const ok =
+      payload.r === tutorialExpected.r &&
+      payload.c === tutorialExpected.c &&
+      payload.dr === tutorialExpected.dr &&
+      payload.dc === tutorialExpected.dc
+    if (!ok) return
+  }
+  await game.swipe(payload.r, payload.c, payload.dr, payload.dc)
+}
+
+async function exitToMenu() {
+  clearIdleHintTimer()
+  hintCellKey.value = ''
+  game.quit()
+  yandexGames.notifyGameplayStop()
+  await yandexGames.hideStickyBannerAdv()
+  router.push({ name: 'menu' })
+}
+
+</script>
+
+<style scoped>
+.play {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  color: var(--m3-text);
+  overflow: hidden;
+}
+
+.play__pause-scrim {
+  z-index: 220;
+}
+
+.play__pause-dialog {
+  width: min(100%, 300px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  padding: 2.05rem 1.15rem 1.2rem;
+  box-sizing: border-box;
+}
+.play__pause-ribbon {
+  position: absolute;
+  top: -1.05rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.92rem;
+  z-index: 2;
+}
+.play__pause-sub {
+  margin: 0;
+  padding: 2.05rem 0 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: var(--m3-text-on-wood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.play__pause-actions {
+  justify-content: center;
+  gap: 1.05rem;
+}
+
+.play__loss-scrim {
+  z-index: 230;
+}
+
+.play__loss-dialog {
+  width: min(100%, 320px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.85rem;
+  padding: 2.05rem 1.15rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.play__loss-ribbon {
+  position: absolute;
+  top: -1.05rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.88rem;
+  z-index: 2;
+}
+
+.play__loss-lead {
+  margin: 0;
+  padding: 2rem 0 0;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--m3-text-on-wood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.play__loss-lead strong {
+  color: #c67612;
+}
+
+.play__loss-ad-btn {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.play__loss-skip {
+  margin: 0;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6e3911;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+  opacity: 1;
+}
+
+.play__loss-skip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.play__fly-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  overflow: hidden;
+}
+.play__fly-coin {
+  position: absolute;
+  width: 2.45rem;
+  height: 2.45rem;
+  margin-left: -1.225rem;
+  margin-top: -1.225rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: play-fly-coin 0.68s cubic-bezier(0.2, 0.75, 0.35, 1) forwards;
+  will-change: transform, opacity;
+}
+.play__fly-coin__icon {
+  width: 100%;
+  height: 100%;
+  color: #ffd84a;
+  filter: drop-shadow(0 3px 5px rgba(60, 30, 10, 0.5));
+}
+@keyframes play-fly-coin {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.35);
+    opacity: 0;
+  }
+}
+
+.play__top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
+  padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
+}
+
+.play__top-left {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.play__top-stats {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.22rem;
+  min-width: 0;
+  justify-self: end;
+}
+.play__top-pill {
+  font-size: 0.82rem;
+}
+.play__top-pill :deep(.m3-top-pill__icon) {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+.play__top-pill :deep(.m3-top-pill__icon svg) {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+.play__top-pill--low {
+  border-color: #9a2a22 !important;
+  color: #7a1810 !important;
+}
+.play__top-pill--low :deep(.m3-top-pill__icon) {
+  border-color: #9a2a22 !important;
+}
+.play__back {
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 3px solid var(--m3-border-dark);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--m3-go-1) 0%, var(--m3-go-2) 100%);
+  color: #6e3911;
+  font-size: 1.4rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(110, 57, 17, 0.3),
+    0 3px 0 rgba(110, 57, 17, 0.55);
+}
+.play__back:active {
+  transform: translateY(2px);
+}
+.play__back:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.play__back :deep(svg) {
+  width: 1.12rem;
+  height: 1.12rem;
+  flex-shrink: 0;
+}
+.play__lvl {
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    -1px 0 0 #6e3911,
+    1px 0 0 #6e3911,
+    0 -1px 0 #6e3911,
+    0 1px 0 #6e3911,
+    0 2px 0 rgba(110, 57, 17, 0.5);
+  min-width: 0;
+}
+.play__lvl strong {
+  color: #ffd84a;
+  font-weight: 900;
+  margin-left: 0.25em;
+}
+
+.play__hud {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.5rem 0.65rem 0;
+}
+
+.play__hud-card--booster-mode {
+  padding-top: 0.55rem;
+  padding-bottom: 0.58rem;
+}
+
+.play__goals-booster-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.35rem;
+  padding: 0.15rem 0;
+  box-sizing: border-box;
+}
+
+.play__goals-booster-hint-text {
+  margin: 0;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.38;
+  letter-spacing: 0.02em;
+  color: var(--m3-text-on-wood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  animation: play-booster-hint-in 0.26s ease-out;
+}
+
+.play__hud-card {
+  border: 3px solid var(--m3-border-dark);
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    var(--m3-wood-1) 0%,
+    var(--m3-wood-2) 100%
+  );
+  padding: 0.5rem 0.7rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  color: var(--m3-text-on-wood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -3px 0 rgba(110, 57, 17, 0.3),
+    0 3px 0 rgba(110, 57, 17, 0.55);
+}
+.play__hud-card--goals {
+  padding: 0.62rem 0.85rem 0.65rem;
+  gap: 0;
+  border-color: #5c5852;
+}
+.play__goals-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.play__hud-label--goals-title {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  flex-shrink: 0;
+}
+.play__goals-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  min-width: 0;
+}
+.play__goals-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  min-width: 0;
+  /* flex: 1 1 auto; */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.play__goals-row--spread {
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.play__goals-row::-webkit-scrollbar {
+  display: none;
+}
+.play__goals-bar {
+  width: 100%;
+  height: 0.52rem;
+  border-radius: 999px;
+  border: 2px solid var(--m3-border-dark);
+  background: rgba(110, 57, 17, 0.22);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(110, 57, 17, 0.28);
+  flex-shrink: 0;
+}
+.play__goals-bar-fill {
+  height: 100%;
+  max-width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    #c8e85c 0%,
+    #7cc232 45%,
+    #3d7a18 100%
+  );
+  transition: width 0.28s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.play__goal-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.play__goal-icon {
+  width: 1.45rem;
+  height: 1.45rem;
+  flex-shrink: 0;
+}
+.play__goal-icon--stone {
+  color: #6b6560;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35));
+}
+.play__goal-icon--score {
+  color: #ffd84a;
+  filter: drop-shadow(0 2px 3px rgba(60, 30, 10, 0.45));
+}
+.play__goal-icon--stone-img {
+  object-fit: contain;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.35));
+}
+.play__goal-count {
+  font-size: 1.15rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--m3-text-on-wood);
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.play__goal-chips {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.1rem;
+  max-width: min(11.5rem, 100%);
+  flex-shrink: 1;
+  min-width: 0;
+}
+.play__chip--goal-inline {
+  display: block;
+  width: 1.45rem;
+  height: 1.45rem;
+  object-fit: contain;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+.play__chip--goal-inline.play__chip--goal-stack {
+  width: 1.12rem;
+  height: 1.12rem;
+}
+.play__hud-label {
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--m3-text-soft);
+}
+.play__chip {
+  display: block;
+  width: 1.55rem;
+  height: 1.55rem;
+  object-fit: contain;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+.play__board-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.4rem;
+  overflow: hidden;
+}
+
+@keyframes play-booster-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.play__boost-row {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 0.28rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 0.65rem;
+  margin: 0 0 max(0.28rem, env(safe-area-inset-bottom, 0px));
+}
+
+.play__boost-btn {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 2.75rem;
+  padding: 0;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 0.3rem;
+  border-radius: 10px;
+  border: 2.5px solid var(--m3-border-dark);
+  background: linear-gradient(180deg, var(--m3-go-1) 0%, var(--m3-go-2) 92%);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 2px 0 rgba(110, 57, 17, 0.42);
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.play__boost-btn--ad {
+  background: linear-gradient(180deg, #d4b8ec 0%, #8855b8 92%);
+}
+
+.play__boost-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.play__boost-btn:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.play__boost-btn--on {
+  background: linear-gradient(180deg, #d7ff8a 0%, #69c92a 92%);
+  border-color: #2f6c12;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 0 2px rgba(200, 232, 92, 0.55),
+    0 2px 0 rgba(110, 57, 17, 0.42);
+}
+
+.play__boost-ico {
+  width: 1.34rem;
+  height: 1.34rem;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+  position: relative;
+  z-index: 0;
+}
+
+.play__boost-count {
+  font-size: 1.1rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    -1px 0 0 #5a1f10,
+    1px 0 0 #5a1f10,
+    0 -1px 0 #5a1f10,
+    0 1px 0 #5a1f10,
+    0 2px 0 rgba(90, 31, 16, 0.45);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.play__boost-ico--svg {
+  width: 1.32rem;
+  height: 1.32rem;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.play__boost-ico--svg :deep(svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.play__boost-ad-ico {
+  width: 1.12rem;
+  height: 1.12rem;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.92);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+  pointer-events: none;
+}
+
+.play__boost-ad-ico :deep(svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.play__foot {
+  padding: 0 0.85rem max(0.7rem, env(safe-area-inset-bottom, 0px));
+}
+.play__hint {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow:
+    -1px 0 0 #6e3911,
+    1px 0 0 #6e3911,
+    0 -1px 0 #6e3911,
+    0 1px 0 #6e3911;
+}
+.play__hint--ok {
+  color: #b6e15a;
+}
+.play__hint--bad {
+  color: #ff8a82;
+}
+
+/* ===================== Tutorial overlay ===================== */
+.m3-tutorial {
+  position: absolute;
+  inset: 0;
+  z-index: 260;
+  pointer-events: auto;
+}
+.m3-tutorial--swap {
+  pointer-events: none;
+}
+.m3-tutorial__hole {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+}
+.m3-tutorial--swap .m3-tutorial__hole {
+  pointer-events: none;
+}
+.m3-tutorial__ring {
+  position: absolute;
+  border-radius: 14px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 0 0 4px rgba(255, 226, 122, 0.55),
+    0 10px 22px rgba(0, 0, 0, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.m3-tutorial__step-panel {
+  position: absolute;
+  padding: 1.1rem 0.9rem 0.75rem;
+  border-radius: 16px;
+  border: 3px solid var(--m3-border-dark);
+  background: linear-gradient(180deg, var(--m3-wood-1) 0%, var(--m3-wood-2) 100%);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -3px 0 rgba(110, 57, 17, 0.28),
+    0 8px 18px rgba(0, 0, 0, 0.25);
+  color: var(--m3-text-on-wood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+  z-index: 5;
+}
+.m3-tutorial__step-ribbon {
+  position: absolute;
+  top: -0.85rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 2px solid rgba(70, 40, 18, 0.55);
+  background: linear-gradient(180deg, #ffe27a 0%, #ffae22 80%, #d97a14 100%);
+  color: #6e3911;
+  font-weight: 900;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.m3-tutorial__step-title {
+  font-weight: 900;
+  font-size: 0.9rem;
+  line-height: 1.1;
+}
+.m3-tutorial__step-sub {
+  margin-top: 0.25rem;
+  font-weight: 800;
+  font-size: 0.78rem;
+  opacity: 0.95;
+}
+
+/* ===================== Driver.js (HUD-туториал) ===================== */
+:global(.driver-popover) {
+  border-radius: 16px !important;
+  border: 3px solid var(--m3-border-dark) !important;
+  background: linear-gradient(
+    180deg,
+    var(--m3-wood-1, #f1d6a7) 0%,
+    var(--m3-wood-2, #d6ab6d) 100%
+  ) !important;
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -3px 0 rgba(110, 57, 17, 0.28),
+    0 10px 22px rgba(0, 0, 0, 0.25) !important;
+  color: var(--m3-text-on-wood, #2b1a0e) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+  font-family: inherit !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+}
+:global(.driver-popover-title) {
+  font-weight: 900 !important;
+  font-size: 0.95rem !important;
+  margin: 0 !important;
+}
+:global(.driver-popover-description) {
+  font-weight: 700 !important;
+  font-size: 0.82rem !important;
+  line-height: 1.25 !important;
+  margin-top: 0.25rem !important;
+  opacity: 0.95 !important;
+}
+:global(.driver-popover-footer) {
+  margin-top: 0.6rem !important;
+  gap: 0.45rem !important;
+}
+:global(.driver-popover-prev-btn),
+:global(.driver-popover-next-btn),
+:global(.driver-popover-close-btn) {
+  font: inherit !important;
+  border-radius: 12px !important;
+  border: 2.5px solid var(--m3-border-dark) !important;
+  padding: 0.4rem 0.7rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(110, 57, 17, 0.28),
+    0 3px 0 rgba(110, 57, 17, 0.55) !important;
+}
+:global(.driver-popover-next-btn) {
+  background: linear-gradient(180deg, var(--m3-go-1) 0%, var(--m3-go-2) 92%) !important;
+  color: #6e3911 !important;
+}
+:global(.driver-popover-prev-btn) {
+  background: linear-gradient(180deg, #d6d2c6 0%, #a39d8d 60%, #6f6a5e 100%) !important;
+  color: #4a4538 !important;
+}
+:global(.driver-popover-prev-btn:disabled) {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+}
+:global(.driver-popover-arrow) {
+  color: var(--m3-wood-2) !important;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.18)) !important;
+}
+.m3-tutorial__ring--from {
+  animation: m3-tutorial-pulse 0.9s ease-in-out infinite;
+}
+@keyframes m3-tutorial-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+.m3-tutorial__hint {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+  z-index: 4;
+}
+.m3-tutorial__panel {
+  position: relative;
+  max-width: min(320px, 86vw);
+  padding: 1.2rem 0.9rem 0.85rem;
+  border-radius: 16px;
+  border: 3px solid var(--m3-border-dark);
+  background: linear-gradient(180deg, var(--m3-wood-1) 0%, var(--m3-wood-2) 100%);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -3px 0 rgba(110, 57, 17, 0.28),
+    0 8px 18px rgba(0, 0, 0, 0.25);
+  color: var(--m3-text-on-wood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.m3-tutorial__ribbon {
+  position: absolute;
+  top: -0.85rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 2px solid rgba(70, 40, 18, 0.55);
+  background: linear-gradient(180deg, #ffe27a 0%, #ffae22 80%, #d97a14 100%);
+  color: #6e3911;
+  font-weight: 900;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.m3-tutorial__title {
+  font-weight: 900;
+  font-size: 0.88rem;
+  line-height: 1.1;
+}
+.m3-tutorial__text {
+  margin-top: 0.2rem;
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  opacity: 0.95;
+}
+
+.m3-tutorial__swipe {
+  position: absolute;
+  height: 0;
+  z-index: 3;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.22));
+}
+.m3-tutorial__swipe-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 6px;
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 226, 122, 0.0) 0%, rgba(255, 226, 122, 0.95) 40%, rgba(255, 226, 122, 0.95) 100%);
+  transform: translateY(-50%);
+}
+.m3-tutorial__swipe-head {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 14px solid rgba(255, 226, 122, 0.98);
+  transform: translateY(-50%);
+}
+</style>
