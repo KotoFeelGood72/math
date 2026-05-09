@@ -27,8 +27,15 @@
         </div>
       </header>
 
-      <h1 class="menu__title">три&nbsp;в&nbsp;ряд</h1>
-      <p class="menu__subtitle">Собирай тройки. Бей рекорды.</p>
+      <div class="menu__logo-wrap">
+        <img
+          class="menu__logo"
+          :src="logoUrl"
+          alt="Три в ряд — собирай тройки, бей рекорды"
+          decoding="async"
+          draggable="false"
+        />
+      </div>
 
       <div class="menu__cards">
         <MenuCardButton
@@ -75,6 +82,7 @@ import { useMatch3ProgressStore } from '@/stores/match3Progress'
 import { Icon } from '@iconify/vue'
 
 const router = useRouter()
+const logoUrl = `${import.meta.env.BASE_URL}logo.png`
 const progress = useMatch3ProgressStore()
 const {
   highestUnlocked,
@@ -154,43 +162,24 @@ function goSettings() {
   gap: 0.4rem;
 }
 
-.menu__title {
-  margin: 1.6rem 0 0.35rem;
-  text-align: center;
-  font-size: clamp(2.6rem, 13vw, 3.4rem);
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #fff;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  text-shadow:
-    -2px 0 0 #6e3911,
-    2px 0 0 #6e3911,
-    0 -2px 0 #6e3911,
-    0 2px 0 #6e3911,
-    -2px -2px 0 #6e3911,
-    2px -2px 0 #6e3911,
-    -2px 2px 0 #6e3911,
-    2px 2px 0 #6e3911,
-    0 5px 0 rgba(110, 57, 17, 0.6),
-    0 0 18px rgba(255, 226, 122, 0.7);
+.menu__logo-wrap {
+  /* margin: 2.35rem auto; */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: 30px;
 }
-.menu__title::first-letter {
-  color: #ffd84a;
-}
-.menu__subtitle {
-  margin: 0 0 1.4rem;
-  text-align: center;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.05em;
-  text-shadow:
-    -1px 0 0 #6e3911,
-    1px 0 0 #6e3911,
-    0 -1px 0 #6e3911,
-    0 1px 0 #6e3911,
-    0 2px 0 rgba(110, 57, 17, 0.5);
+.menu__logo {
+  display: block;
+  width: min(98vw, 27rem);
+  max-height: min(50vh, 17.5rem);
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 0 rgba(110, 57, 17, 0.35))
+    drop-shadow(0 2px 12px rgba(0, 40, 90, 0.18));
 }
 
 .menu__cards {

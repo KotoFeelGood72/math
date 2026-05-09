@@ -18,6 +18,7 @@ export const BOARD_CANVAS_SIZE = 6
 /**
  * Формы уровней: каждая ровно BOARD_CANVAS_SIZE×BOARD_CANVAS_SIZE.
  * '#' — активная клетка, '.' — блок (вне формы).
+ * В каждом ряду формы — минимум 3 активные клетки (узкие «двойные коридоры» без матчей).
  */
 const SHAPE_PATTERNS = [
   // 0 — полный прямоугольник
@@ -31,12 +32,12 @@ const SHAPE_PATTERNS = [
   ],
   // 1 — ромб
   [
-    '..##..',
+    '..###.',
     '.####.',
     '######',
     '######',
     '.####.',
-    '..##..',
+    '..###.',
   ],
   // 2 — сердце (упрощённо)
   [
@@ -44,42 +45,42 @@ const SHAPE_PATTERNS = [
     '######',
     '######',
     '.####.',
-    '..##..',
-    '..##..',
+    '..###.',
+    '..###.',
   ],
   // 3 — стрела вверх
   [
-    '..##..',
+    '..###.',
     '.####.',
     '######',
-    '..##..',
-    '..##..',
-    '..##..',
+    '..###.',
+    '..###.',
+    '..###.',
   ],
   // 4 — плюс
   [
-    '..##..',
-    '..##..',
+    '..###.',
+    '..###.',
     '######',
     '######',
-    '..##..',
-    '..##..',
+    '..###.',
+    '..###.',
   ],
   // 5 — Т-образная
   [
     '######',
     '######',
-    '..##..',
-    '..##..',
-    '..##..',
-    '..##..',
+    '..###.',
+    '..###.',
+    '..###.',
+    '..###.',
   ],
   // 6 — песочные часы
   [
     '######',
     '.####.',
-    '..##..',
-    '..##..',
+    '..###.',
+    '..###.',
     '.####.',
     '######',
   ],
@@ -87,12 +88,14 @@ const SHAPE_PATTERNS = [
   [
     '##..##',
     '######',
-    '..##..',
-    '..##..',
+    '..###.',
+    '..###.',
     '######',
     '##..##',
   ],
 ]
+
+const MIN_ACTIVE_PER_SHAPE_ROW = 3
 
 /** Перевести маску из ASCII в матрицу 0/1 (размер BOARD_CANVAS_SIZE×BOARD_CANVAS_SIZE). */
 function compileShape(pattern) {
@@ -106,8 +109,16 @@ function compileShape(pattern) {
   const mask = []
   for (let r = 0; r < rows; r += 1) {
     const row = new Array(cols)
+    let active = 0
     for (let c = 0; c < cols; c += 1) {
-      row[c] = pattern[r][c] === '#' ? 1 : 0
+      const v = pattern[r][c] === '#' ? 1 : 0
+      row[c] = v
+      active += v
+    }
+    if (active > 0 && active < MIN_ACTIVE_PER_SHAPE_ROW) {
+      throw new Error(
+        `[levelGenerator] в строке формы должно быть ≥${MIN_ACTIVE_PER_SHAPE_ROW} активных клеток, строка ${r}: "${pattern[r]}"`,
+      )
     }
     mask.push(row)
   }
@@ -148,6 +159,149 @@ function sumStoneHpGrid(grid) {
   let s = 0
   for (const row of grid) for (const v of row) s += v | 0
   return s
+}
+
+/** Есть ли две соседние по стороне активные клетки без камня (иначе свопов не существует). */
+function hasAdjacentFreeCells(mask, hp) {
+  const rows = mask.length
+  const cols = mask[0].length
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      if (!mask[r][c]) continue
+      if ((hp[r][c] ?? 0) > 0) continue
+      if (
+        c + 1 < cols &&
+        mask[r][c + 1] &&
+        (hp[r][c + 1] ?? 0) === 0
+      ) {
+        return true
+      }
+      if (
+        r + 1 < rows &&
+        mask[r + 1][c] &&
+        (hp[r + 1][c] ?? 0) === 0
+      ) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/** Пары соседних активных клеток (ребро графа формы). */
+function listActiveEdges(mask) {
+  const rows = mask.length
+  const cols = mask[0].length
+  /** @type {{ a: { r: number, c: number }, b: { r: number, c: number } }[]} */
+  const edges = []
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      if (!mask[r][c]) continue
+      if (c + 1 < cols && mask[r][c + 1]) {
+        edges.push({ a: { r, c }, b: { r, c: c + 1 } })
+      }
+      if (r + 1 < rows && mask[r + 1][c]) {
+        edges.push({ a: { r, c }, b: { r: r + 1, c } })
+      }
+    }
+  }
+  return edges
+}
+
+/**
+ * Камни не должны изолировать все фишки: нужна хотя бы одна пара соседних «живых» клеток.
+ */
+function ensureAdjacentFreePair(mask, hp, rng) {
+  if (hasAdjacentFreeCells(mask, hp)) return hp
+  const edges = listActiveEdges(mask)
+  if (!edges.length) return hp
+  const pick = edges[Math.floor(rng() * edges.length)]
+  hp[pick.a.r][pick.a.c] = 0
+  hp[pick.b.r][pick.b.c] = 0
+  return hp
+}
+
+function maxConsecutiveFreeInRows(mask, hp) {
+  let mx = 0
+  const rows = mask.length
+  const cols = mask[0].length
+  for (let r = 0; r < rows; r += 1) {
+    let seg = 0
+    for (let c = 0; c < cols; c += 1) {
+      if (mask[r][c] && (hp[r][c] ?? 0) === 0) {
+        seg += 1
+        mx = Math.max(mx, seg)
+      } else {
+        seg = 0
+      }
+    }
+  }
+  return mx
+}
+
+function maxConsecutiveFreeInCols(mask, hp) {
+  let mx = 0
+  const rows = mask.length
+  const cols = mask[0].length
+  for (let c = 0; c < cols; c += 1) {
+    let seg = 0
+    for (let r = 0; r < rows; r += 1) {
+      if (mask[r][c] && (hp[r][c] ?? 0) === 0) {
+        seg += 1
+        mx = Math.max(mx, seg)
+      } else {
+        seg = 0
+      }
+    }
+  }
+  return mx
+}
+
+function hasFree2x2Block(mask, hp) {
+  const rows = mask.length
+  const cols = mask[0].length
+  for (let r = 0; r < rows - 1; r += 1) {
+    for (let c = 0; c < cols - 1; c += 1) {
+      if (
+        mask[r][c] &&
+        mask[r][c + 1] &&
+        mask[r + 1][c] &&
+        mask[r + 1][c + 1] &&
+        (hp[r][c] ?? 0) === 0 &&
+        (hp[r][c + 1] ?? 0) === 0 &&
+        (hp[r + 1][c] ?? 0) === 0 &&
+        (hp[r + 1][c + 1] ?? 0) === 0
+      ) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Матчи не учитывают фишки под камнем — нужна хотя бы одна линия из ≥3 свободных клеток
+ * или свободный квадрат 2×2; иначе убираем камни по одному.
+ */
+function ensureStoneAwareMatchTopology(mask, hp, rng) {
+  let guard = 0
+  while (guard < 240) {
+    guard += 1
+    const mh = maxConsecutiveFreeInRows(mask, hp)
+    const mv = maxConsecutiveFreeInCols(mask, hp)
+    if (mh >= 3 || mv >= 3 || hasFree2x2Block(mask, hp)) return hp
+    const stones = []
+    for (let r = 0; r < mask.length; r += 1) {
+      for (let c = 0; c < mask[0].length; c += 1) {
+        if (!mask[r][c]) continue
+        if ((hp[r][c] ?? 0) > 0) stones.push({ r, c })
+      }
+    }
+    if (stones.length === 0) return hp
+    const pick = stones[Math.floor(rng() * stones.length)]
+    hp[pick.r][pick.c] = 0
+  }
+  return hp
 }
 
 /**
@@ -196,6 +350,8 @@ export function buildInitialStoneHp(rows, cols, mask, seed, level) {
       }
     }
   }
+  ensureAdjacentFreePair(mask, grid, rng)
+  ensureStoneAwareMatchTopology(mask, grid, rng)
   return grid
 }
 
@@ -305,7 +461,8 @@ export function buildLevelBoard(config) {
   if (config && Array.isArray(config.presetBoard) && config.presetBoard.length) {
     return config.presetBoard.map((row) => row.slice())
   }
-  return generateBoard(config.rows, config.cols, config.colors, rng, config.mask)
+  const stoneHp = config.stoneHpInitial ?? null
+  return generateBoard(config.rows, config.cols, config.colors, rng, config.mask, stoneHp)
 }
 
 export function describeObjective(objective) {

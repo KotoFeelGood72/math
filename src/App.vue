@@ -7,7 +7,19 @@
       aria-live="polite"
       aria-busy="true"
     >
-      Загрузка…
+      <div class="app-boot__bg" aria-hidden="true" :style="bootLoaderBgStyle" />
+      <div class="app-boot__bottom">
+        <div class="app-boot__bar-wrap">
+          <div class="app-boot__bar-track">
+            <div
+              class="app-boot__bar-fill"
+              :style="{ width: `${bootProgress}%` }"
+            />
+            <span class="app-boot__bar-label">{{ bootProgress }}%</span>
+          </div>
+        </div>
+        <p class="app-boot__tip">{{ currentBootTip }}</p>
+      </div>
     </div>
     <template v-else>
       <div class="app-root__view">
@@ -18,7 +30,14 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { useYandexGamesStore } from '@/stores/yandexGames'
@@ -36,8 +55,77 @@ import {
 } from '@/audio/backgroundMusic.js'
 import bgmUrl from '@/assets/music.mp3'
 
+const LOADING_TIPS = [
+  'Совет: собирай больше комбинаций для супер бонусов!',
+  'Совет: сначала разрушай препятствия — так будет проще составить цепочку.',
+  'Совет: обращай внимание на цели уровня и ходы.',
+  'Совет: иногда выгоднее не самый длинный матч, а нужный цвет.',
+  'Совет: используй бустеры в трудный момент — не копи их зря.',
+]
+
+/** Минимум времени показа экрана загрузки (мс); за это время полоса идёт от 0% до 100%. */
+const BOOT_SCREEN_MIN_MS = 2000
+
 const appRootEl = ref(null)
 const bootReady = ref(false)
+/** Инициализация SDK и данных завершена (можно уходить с экрана после min time). */
+const bootBootstrapDone = ref(false)
+const bootProgress = ref(0)
+const bootTipIndex = ref(
+  Math.floor(Math.random() * Math.max(LOADING_TIPS.length, 1)),
+)
+
+const currentBootTip = computed(
+  () => LOADING_TIPS[bootTipIndex.value % LOADING_TIPS.length],
+)
+
+let bootProgressRaf = 0
+let bootTipTimer = 0
+const bootProgressStartedAt = typeof performance !== 'undefined'
+  ? performance.now()
+  : 0
+
+function tickBootProgress() {
+  if (bootReady.value) return
+  const elapsed = performance.now() - bootProgressStartedAt
+  const pct = Math.min(100, (elapsed / BOOT_SCREEN_MIN_MS) * 100)
+  bootProgress.value = Math.round(pct)
+
+  const minTimeOk = elapsed >= BOOT_SCREEN_MIN_MS
+  if (bootBootstrapDone.value && minTimeOk) {
+    bootProgress.value = 100
+    stopBootTipRotation()
+    stopBootProgressLoop()
+    bootReady.value = true
+    return
+  }
+
+  bootProgressRaf = requestAnimationFrame(tickBootProgress)
+}
+
+function startBootTipRotation() {
+  stopBootTipRotation()
+  bootTipTimer = window.setInterval(() => {
+    bootTipIndex.value = (bootTipIndex.value + 1) % LOADING_TIPS.length
+  }, 4500)
+}
+
+function stopBootTipRotation() {
+  if (bootTipTimer) {
+    clearInterval(bootTipTimer)
+    bootTipTimer = 0
+  }
+}
+
+function stopBootProgressLoop() {
+  if (bootProgressRaf) {
+    cancelAnimationFrame(bootProgressRaf)
+    bootProgressRaf = 0
+  }
+}
+
+bootProgressRaf = requestAnimationFrame(tickBootProgress)
+startBootTipRotation()
 let progressSaveTimer = 0
 const SAVE_DEBOUNCE_MS = 3500
 
@@ -50,6 +138,12 @@ const game = useMatch3GameStore()
 const audioSettings = useAudioSettingsStore()
 
 const { lastSavedSnapshotKey } = storeToRefs(flow)
+
+const publicAssetBase = import.meta.env.BASE_URL
+const bootLoaderBgStyle = computed(() => ({
+  '--boot-bg-mobile': `url('${publicAssetBase}mobile-loader.png')`,
+  '--boot-bg-pc': `url('${publicAssetBase}pc-loader.png')`,
+}))
 
 watch(
   () => 'Match-3',
@@ -187,7 +281,7 @@ void (async () => {
       console.error('[Match3][App] bootstrap', e)
     }
   } finally {
-    bootReady.value = true
+    bootBootstrapDone.value = true
   }
 })()
 
@@ -224,6 +318,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopBootProgressLoop()
+  stopBootTipRotation()
   detachAppRootUiGuards()
   detachViewportTouchGuards()
   void flushProgressToCloud(true)
@@ -497,6 +593,42 @@ body {
     0 12px 26px rgba(60, 30, 10, 0.4);
 }
 
+/* Появление модальных окон: лёгкий bounce + затемнение фона */
+@keyframes m3-modal-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes m3-modal-panel-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.78);
+  }
+  58% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  78% {
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m3-modal-overlay,
+  .m3-modal-overlay > .m3-modal-panel,
+  .result .result__panel.m3-modal-panel {
+    animation: none !important;
+  }
+}
+
 /* Модальные панели (пауза, итог уровня): светлый крем, тёмная обводка */
 .m3-modal-panel {
   position: relative;
@@ -531,6 +663,18 @@ body {
   background: rgba(30, 55, 90, 0.38);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
+  animation: m3-modal-scrim-in 0.22s ease forwards;
+}
+
+.m3-modal-overlay > .m3-modal-panel {
+  transform-origin: center center;
+  animation: m3-modal-panel-bounce-in 0.52s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+
+/* Экран результата уровня (без overlay-обёртки) */
+.result .result__panel.m3-modal-panel {
+  transform-origin: center center;
+  animation: m3-modal-panel-bounce-in 0.52s cubic-bezier(0.34, 1.45, 0.64, 1) both;
 }
 
 /* Круглые действия под модальные окна (меню / рестарт / далее) */
@@ -886,16 +1030,112 @@ body {
 }
 
 .app-boot {
-  flex: 1;
-  min-height: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  min-height: 100dvh;
+  min-height: 100svh;
+  padding: 0 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.app-boot__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: #4ea6e0;
+  background-image: var(--boot-bg-mobile);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+@media (min-width: 900px) {
+  .app-boot__bg {
+    background-image: var(--boot-bg-pc);
+  }
+}
+
+.app-boot__bottom {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: min(26rem, 100%);
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.85rem;
+}
+
+.app-boot__bar-wrap {
+  width: 100%;
+}
+
+.app-boot__bar-track {
+  position: relative;
+  height: 2.75rem;
+  border-radius: 999px;
+  background: #1a0c08;
+  border: 3px solid #e8b030;
+  box-shadow:
+    0 0 0 1px rgba(255, 220, 120, 0.35),
+    0 0 14px rgba(232, 176, 48, 0.55);
+  overflow: hidden;
+}
+
+.app-boot__bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  max-width: 100%;
+  background:
+    repeating-linear-gradient(
+      -52deg,
+      rgba(255, 255, 255, 0.22) 0 10px,
+      rgba(255, 255, 255, 0) 10px 20px
+    ),
+    linear-gradient(180deg, #ffe94a 0%, #ff9a1a 55%, #f57800 100%);
+  box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.35);
+  transition: width 0.12s ease-out;
+}
+
+.app-boot__bar-label {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100dvh;
-  font-size: 0.95rem;
-  font-weight: 600;
+  height: 100%;
+  font-size: 1.05rem;
+  font-weight: 800;
   letter-spacing: 0.02em;
-  opacity: 0.85;
+  color: #ffffff;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.65),
+    0 0 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.app-boot__tip {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(0.82rem, 2.8vw, 0.95rem);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.55),
+    0 0 12px rgba(0, 0, 0, 0.35);
 }
 
 .app-root__view {

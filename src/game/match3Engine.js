@@ -78,12 +78,35 @@ export function isAdjacent(a, b) {
   return dr + dc === 1
 }
 
+/**
+ * Клетка с камнем под фишкой: своп недоступен (должно совпадать с логикой игры).
+ * @param {number[][] | null | undefined} stoneHp
+ */
+export function pieceLockedByStone(stoneHp, r, c) {
+  if (!stoneHp || !stoneHp.length) return false
+  return (stoneHp[r]?.[c] ?? 0) > 0
+}
+
+/**
+ * Участвует ли фишка в цветовых матчах (линии / 2×2).
+ * Пока на клетке есть камень — фишка под ним не считается в линиях (видимость = правила хода).
+ */
+export function gemEligibleForColorMatch(board, stoneHp, r, c) {
+  const v = board[r]?.[c]
+  if (v === undefined || v === EMPTY || v === BLOCKED) return false
+  if (pieceLockedByStone(stoneHp, r, c)) return false
+  if (isRainbow(v)) return false
+  return getColor(v) >= 0
+}
+
 /** Заполнить пустое поле обычными фишками так, чтобы не было стартовых матчей и был хотя бы один ход.
  *  mask — необязательная rows×cols матрица 0/1: 0 = заблокированная клетка (вне формы уровня).
+ *  stoneHp — слои камня (как в уровне): фишку на камне нельзя двигать; без этого возможны «тупики».
  */
-export function generateBoard(rows, cols, colors, rng, mask = null) {
+export function generateBoard(rows, cols, colors, rng, mask = null, stoneHp = null) {
   let board
   let attempt = 0
+  const maxAttempts = 160
   do {
     board = []
     for (let r = 0; r < rows; r += 1) {
@@ -98,7 +121,7 @@ export function generateBoard(rows, cols, colors, rng, mask = null) {
       board.push(row)
     }
     attempt += 1
-  } while (!hasAnyMove(board) && attempt < 20)
+  } while (!hasAnyMove(board, stoneHp) && attempt < maxAttempts)
   return board
 }
 
@@ -161,8 +184,11 @@ function pickNonMatching(board, currentRow, r, c, colors, rng) {
  * runs нужны, чтобы понять, какой именно бустер создавать (line-4 / line-5 / L-shape).
  *
  * Радужная фишка (RAINBOW) сама по себе в матчах не участвует.
+ *
+ * stoneHp — если передан, клетки с активным камнем не входят в цветовые матчи
+ * (фишка под камнем не «видна» для линий и 2×2; камень ломается от соседних очисток).
  */
-export function findMatches(board) {
+export function findMatches(board, stoneHp = null) {
   const rows = board.length
   const cols = board[0].length
   /** @type {{ dir: 'h'|'v', r: number, c: number, len: number }[]} */
@@ -174,10 +200,16 @@ export function findMatches(board) {
     for (let c = 1; c <= cols; c += 1) {
       const same =
         c < cols &&
+        gemEligibleForColorMatch(board, stoneHp, r, runStart) &&
+        gemEligibleForColorMatch(board, stoneHp, r, c) &&
         sameNormalColor(board[r][runStart], board[r][c])
       if (!same) {
         const len = c - runStart
-        if (len >= 3 && getColor(board[r][runStart]) >= 0) {
+        if (
+          len >= 3 &&
+          gemEligibleForColorMatch(board, stoneHp, r, runStart) &&
+          getColor(board[r][runStart]) >= 0
+        ) {
           runs.push({ dir: 'h', r, c: runStart, len })
         }
         runStart = c
@@ -190,10 +222,16 @@ export function findMatches(board) {
     for (let r = 1; r <= rows; r += 1) {
       const same =
         r < rows &&
+        gemEligibleForColorMatch(board, stoneHp, runStart, c) &&
+        gemEligibleForColorMatch(board, stoneHp, r, c) &&
         sameNormalColor(board[runStart][c], board[r][c])
       if (!same) {
         const len = r - runStart
-        if (len >= 3 && getColor(board[runStart][c]) >= 0) {
+        if (
+          len >= 3 &&
+          gemEligibleForColorMatch(board, stoneHp, runStart, c) &&
+          getColor(board[runStart][c]) >= 0
+        ) {
           runs.push({ dir: 'v', r: runStart, c, len })
         }
         runStart = r
@@ -208,6 +246,10 @@ export function findMatches(board) {
     for (let c = 0; c < cols - 1; c += 1) {
       const a = board[r][c]
       if (a === EMPTY || a === BLOCKED) continue
+      if (!gemEligibleForColorMatch(board, stoneHp, r, c)) continue
+      if (!gemEligibleForColorMatch(board, stoneHp, r, c + 1)) continue
+      if (!gemEligibleForColorMatch(board, stoneHp, r + 1, c)) continue
+      if (!gemEligibleForColorMatch(board, stoneHp, r + 1, c + 1)) continue
       if (isRainbow(a)) continue
       const col = getColor(a)
       if (col < 0) continue
@@ -531,18 +573,21 @@ export function swap(board, a, b) {
 }
 
 /** Есть ли хотя бы один валидный своп (даёт матч / рейнбоу-активация)? */
-export function hasAnyMove(board) {
+export function hasAnyMove(board, stoneHp = null) {
   const rows = board.length
   const cols = board[0].length
   for (let r = 0; r < rows; r += 1) {
     for (let c = 0; c < cols; c += 1) {
       const v = board[r][c]
       if (v === BLOCKED) continue
-      // Радужная фишка → ход всегда возможен (если рядом есть любая цветная)
+      if (pieceLockedByStone(stoneHp, r, c)) continue
+      // Радужная фишка — только если сосед доступен для свопа
       if (isRainbow(v)) {
         const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]
         for (const [nr, nc] of neighbors) {
           if (nr >= 0 && nc >= 0 && nr < rows && nc < cols) {
+            if (board[nr][nc] === BLOCKED) continue
+            if (pieceLockedByStone(stoneHp, nr, nc)) continue
             if (getColor(board[nr][nc]) >= 0) return true
           }
         }
@@ -550,14 +595,18 @@ export function hasAnyMove(board) {
       if (
         c + 1 < cols &&
         board[r][c + 1] !== BLOCKED &&
-        trySwapMakesMatch(board, { r, c }, { r, c: c + 1 })
+        !pieceLockedByStone(stoneHp, r, c) &&
+        !pieceLockedByStone(stoneHp, r, c + 1) &&
+        trySwapMakesMatch(board, { r, c }, { r, c: c + 1 }, stoneHp)
       ) {
         return true
       }
       if (
         r + 1 < rows &&
         board[r + 1][c] !== BLOCKED &&
-        trySwapMakesMatch(board, { r, c }, { r: r + 1, c })
+        !pieceLockedByStone(stoneHp, r, c) &&
+        !pieceLockedByStone(stoneHp, r + 1, c) &&
+        trySwapMakesMatch(board, { r, c }, { r: r + 1, c }, stoneHp)
       ) {
         return true
       }
@@ -566,16 +615,16 @@ export function hasAnyMove(board) {
   return false
 }
 
-function trySwapMakesMatch(board, a, b) {
+function trySwapMakesMatch(board, a, b, stoneHp = null) {
   const next = swap(board, a, b)
-  return findMatches(next).length > 0
+  return findMatches(next, stoneHp).length > 0
 }
 
 /**
  * Первый допустимый своп (как в hasAnyMove): для подсказки качаем фишку `from`.
  * @returns {{ from: { r: number, c: number }, to: { r: number, c: number } } | null}
  */
-export function findHintSwap(board) {
+export function findHintSwap(board, stoneHp = null) {
   const rows = board.length
   const cols = board[0]?.length ?? 0
   if (!rows || !cols) return null
@@ -584,6 +633,7 @@ export function findHintSwap(board) {
     for (let c = 0; c < cols; c += 1) {
       const v = board[r][c]
       if (v === BLOCKED) continue
+      if (pieceLockedByStone(stoneHp, r, c)) continue
 
       if (isRainbow(v)) {
         const neighbors = [
@@ -598,7 +648,8 @@ export function findHintSwap(board) {
             nc < 0 ||
             nr >= rows ||
             nc >= cols ||
-            board[nr][nc] === BLOCKED
+            board[nr][nc] === BLOCKED ||
+            pieceLockedByStone(stoneHp, nr, nc)
           ) {
             continue
           }
@@ -611,25 +662,35 @@ export function findHintSwap(board) {
       if (c + 1 < cols && board[r][c + 1] !== BLOCKED) {
         const a = { r, c }
         const b = { r, c: c + 1 }
-        if (trySwapMakesMatch(board, a, b)) {
-          return { from: a, to: b }
+        if (
+          !pieceLockedByStone(stoneHp, r, c) &&
+          !pieceLockedByStone(stoneHp, r, c + 1)
+        ) {
+          if (trySwapMakesMatch(board, a, b, stoneHp)) {
+            return { from: a, to: b }
+          }
+          const va = board[r][c]
+          const vb = board[r][c + 1]
+          if (isRainbow(va) && getColor(vb) >= 0) return { from: a, to: b }
+          if (isRainbow(vb) && getColor(va) >= 0) return { from: a, to: b }
         }
-        const va = board[r][c]
-        const vb = board[r][c + 1]
-        if (isRainbow(va) && getColor(vb) >= 0) return { from: a, to: b }
-        if (isRainbow(vb) && getColor(va) >= 0) return { from: a, to: b }
       }
 
       if (r + 1 < rows && board[r + 1][c] !== BLOCKED) {
         const a = { r, c }
         const b = { r: r + 1, c }
-        if (trySwapMakesMatch(board, a, b)) {
-          return { from: a, to: b }
+        if (
+          !pieceLockedByStone(stoneHp, r, c) &&
+          !pieceLockedByStone(stoneHp, r + 1, c)
+        ) {
+          if (trySwapMakesMatch(board, a, b, stoneHp)) {
+            return { from: a, to: b }
+          }
+          const va = board[r][c]
+          const vb = board[r + 1][c]
+          if (isRainbow(va) && getColor(vb) >= 0) return { from: a, to: b }
+          if (isRainbow(vb) && getColor(va) >= 0) return { from: a, to: b }
         }
-        const va = board[r][c]
-        const vb = board[r + 1][c]
-        if (isRainbow(va) && getColor(vb) >= 0) return { from: a, to: b }
-        if (isRainbow(vb) && getColor(va) >= 0) return { from: a, to: b }
       }
     }
   }

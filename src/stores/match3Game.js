@@ -31,6 +31,7 @@ import {
   swap as swapBoard,
 } from '@/game/match3Engine.js'
 import { createRng } from '@/game/rng.js'
+import { inferClearFx } from '@/game/inferClearFx.js'
 import { useMatch3ProgressStore } from '@/stores/match3Progress.js'
 import { useMatch3StatsStore } from '@/stores/match3Stats.js'
 
@@ -59,6 +60,8 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
   const isBusy = ref(false)
   const lastCascadeCount = ref(0)
   const matchedKeys = ref(new Set())
+  /** Визуальный эффект очередной волны очистки (молнии / лучи). */
+  const clearFx = ref(null)
   const spawnedKeys = ref(new Set())
   const lastUserSwap = ref(null)
 
@@ -117,8 +120,17 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     const cfg = useTutorial ? getTutorialLevelConfig() : getLevelConfig(levelId)
     config.value = cfg
     rng = createRng(cfg.seed ^ Date.now())
-    board.value = buildLevelBoard(cfg)
-    stoneHp.value = cfg.stoneHpInitial.map((row) => row.slice())
+    const stones = cfg.stoneHpInitial.map((row) => row.slice())
+    let built = buildLevelBoard(cfg)
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      if (hasAnyMove(built, stones)) break
+      built = buildLevelBoard({
+        ...cfg,
+        seed: (cfg.seed ^ (attempt + 1) * 0x9e3779b9) >>> 0,
+      })
+    }
+    board.value = built
+    stoneHp.value = stones
     selected.value = null
     score.value = 0
     movesLeft.value = cfg.moves
@@ -129,6 +141,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     isBusy.value = false
     lastCascadeCount.value = 0
     matchedKeys.value = new Set()
+    clearFx.value = null
     spawnedKeys.value = new Set()
     lastUserSwap.value = null
     useMatch3StatsStore().noteLevelStarted()
@@ -163,6 +176,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     boosterClock.value = snap.boosterClock
     boosterStar.value = snap.boosterStar
     matchedKeys.value = new Set()
+    clearFx.value = null
     spawnedKeys.value = new Set()
     selected.value = null
   }
@@ -259,7 +273,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
 
     // === Обычный своп ===
     const swapped = swapBoard(board.value, a, b)
-    const matches = findMatches(swapped)
+    const matches = findMatches(swapped, stoneHp.value)
     // Если бустер «попал» в существующий матч цвета — это уже учтено в matches.
     // Если своп никаких матчей не даёт и не задействует бустер — отскок.
     if (matches.length === 0) {
@@ -287,11 +301,14 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     if (!cfg) return
 
     // Шаг 1 — раскрыть бустеры внутри стартового набора
+    const expandedOnce = expandSpecials(board.value, initialClearSet)
+    clearFx.value = inferClearFx(board.value, expandedOnce)
     matchedKeys.value = new Set(initialClearSet)
     await wait(MATCH_FLASH_MS)
-    const expanded = expandSpecials(board.value, initialClearSet)
+    const expanded = expandedOnce
     await applyClearedAndRefill(expanded, cfg, /* triggerPos */ null, /* createSpecials */ [])
     matchedKeys.value = new Set()
+    clearFx.value = null
 
     // Дальше — обычные каскады
     await runCascades(null, /* skipFirstFlash */ false)
@@ -307,7 +324,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     let chainTrigger = triggerPos
 
     while (true) {
-      const groups = findMatches(board.value)
+      const groups = findMatches(board.value, stoneHp.value)
       if (groups.length === 0) break
 
       // 1) подсветить совпадения
@@ -315,6 +332,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       for (const g of groups) for (const k of g.cells) baseSet.add(k)
       // включить и активацию бустеров, попавших в базовый набор
       const expanded = expandSpecials(board.value, baseSet)
+      clearFx.value = inferClearFx(board.value, expanded)
       matchedKeys.value = new Set(expanded)
 
       await wait(MATCH_FLASH_MS)
@@ -328,6 +346,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       // удалить ячейки + поставить новые бустеры на место триггеров
       await applyClearedAndRefill(expanded, cfg, chainTrigger, specialsToCreate)
       matchedKeys.value = new Set()
+      clearFx.value = null
 
       for (const sp of specialsToCreate) stats.noteSpecialCreated(sp.kind)
       const maxGroup = groups.reduce((m, g) => Math.max(m, g.cells.size), 0)
@@ -339,9 +358,17 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     lastCascadeCount.value = cascades
     stats.noteCascade(cascades)
 
-    if (!hasAnyMove(board.value)) {
+    if (!hasAnyMove(board.value, stoneHp.value)) {
       await wait(220)
-      board.value = buildLevelBoard({ ...cfg, seed: cfg.seed ^ Date.now() })
+      let rebuilt = board.value
+      for (let i = 0; i < 48; i += 1) {
+        rebuilt = buildLevelBoard({
+          ...cfg,
+          seed: (cfg.seed ^ Date.now() ^ (i * 0x9e3779b9)) >>> 0,
+        })
+        if (hasAnyMove(rebuilt, stoneHp.value)) break
+      }
+      board.value = rebuilt
       // Камни на поле не сбрасываем при перегенерации фишек
     }
   }
@@ -598,6 +625,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     movesLeft.value += n
     selected.value = null
     matchedKeys.value = new Set()
+    clearFx.value = null
     spawnedKeys.value = new Set()
     return true
   }
@@ -614,6 +642,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     coinsEarned.value = 0
     isBusy.value = false
     matchedKeys.value = new Set()
+    clearFx.value = null
     spawnedKeys.value = new Set()
     undoStack.value = []
   }
@@ -632,6 +661,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     isBusy,
     lastCascadeCount,
     matchedKeys,
+    clearFx,
     spawnedKeys,
     lastUserSwap,
     boosterBomb,

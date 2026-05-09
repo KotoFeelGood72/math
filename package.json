@@ -10,6 +10,7 @@
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint src scripts vite.config.js eslint.config.js index.html --fix",
     "lint:eslint": "eslint . --fix --cache",
+    "icons:mdi-subset": "node scripts/build-mdi-subset.mjs",
     "build:yandex": "npm run build && node scripts/yandex-zip.js",
     "figma:sync-assets": "node scripts/figma-sync-assets.js"
   },
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@iconify-json/mdi": "^1.2.3",
     "@vitejs/plugin-vue": "^6.0.5",
     "archiver": "^7.0.1",
     "eslint": "^10.1.0",

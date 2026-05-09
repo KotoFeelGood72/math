@@ -129,6 +129,18 @@
       </section>
 
       <section class="play__board-wrap">
+        <div
+          v-if="boosterFxKind"
+          class="play__booster-flash"
+          aria-hidden="true"
+        >
+          <img
+            :src="boosterFxIconSrc"
+            alt=""
+            class="play__booster-flash-icon"
+            draggable="false"
+          />
+        </div>
         <Match3Board
           v-if="board.length"
           ref="boardRef"
@@ -136,6 +148,7 @@
           :stone-hp="stoneHp"
           :selected="selected"
           :matched-keys="matchedKeys"
+          :clear-fx="clearFx"
           :spawned-keys="spawnedKeys"
           :disabled="isBusy || status !== 'playing' || paused || tutorialBoardLocked"
           :hint-cell-key="hintCellKey"
@@ -465,6 +478,7 @@ const {
   objective,
   config,
   matchedKeys,
+  clearFx,
   spawnedKeys,
   isBusy,
   stoneProgress,
@@ -722,6 +736,30 @@ async function updateTutorialUi() {
 const boosterIconBomb = computed(() => getBoosterIconUrl('bomb'))
 const boosterIconClock = computed(() => getBoosterIconUrl('clock'))
 const boosterIconStar = computed(() => getBoosterIconUrl('star'))
+
+/** Краткая анимация иконки бустера по центру доски при применении */
+const boosterFxKind = ref(/** @type {null | 'bomb' | 'clock' | 'star'} */ (null))
+let boosterFxClearTimer = 0
+
+const boosterFxIconSrc = computed(() => {
+  const k = boosterFxKind.value
+  if (k === 'bomb') return boosterIconBomb.value
+  if (k === 'clock') return boosterIconClock.value
+  if (k === 'star') return boosterIconStar.value
+  return ''
+})
+
+function flashBoosterFx(/** @type {'bomb' | 'clock' | 'star'} */ kind) {
+  boosterFxKind.value = kind
+  if (boosterFxClearTimer) {
+    clearTimeout(boosterFxClearTimer)
+    boosterFxClearTimer = 0
+  }
+  boosterFxClearTimer = window.setTimeout(() => {
+    boosterFxKind.value = null
+    boosterFxClearTimer = 0
+  }, 560)
+}
 const stoneGoalIconUrl = computed(() => getStoneIconUrl())
 
 /** Выбор бомбы/звезды — следующий тап по полю применяет бустер */
@@ -772,7 +810,7 @@ function scheduleIdleHint() {
   idleHintTimer = window.setTimeout(() => {
     idleHintTimer = 0
     if (status.value !== 'playing' || paused.value || isBusy.value) return
-    const hint = findHintSwap(board.value)
+    const hint = findHintSwap(board.value, stoneHp.value)
     hintCellKey.value = hint ? `${hint.from.r},${hint.from.c}` : ''
   }, HINT_IDLE_MS)
 }
@@ -916,6 +954,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (boosterFxClearTimer) {
+    clearTimeout(boosterFxClearTimer)
+    boosterFxClearTimer = 0
+  }
   window.removeEventListener('keydown', onPauseKeydown)
   clearIdleHintTimer()
   hintCellKey.value = ''
@@ -1139,7 +1181,8 @@ function selectBooster(kind) {
     return
   }
   if (kind === 'clock') {
-    game.useClockBooster()
+    const ok = game.useClockBooster()
+    if (ok) flashBoosterFx('clock')
     boosterPick.value = null
     bumpUserActivity()
     return
@@ -1171,6 +1214,7 @@ async function onTap(payload) {
   if (tutorialActive.value) return
   if (boosterPick.value === 'bomb') {
     if (boosterBomb.value > 0) {
+      flashBoosterFx('bomb')
       await game.applyBombBooster(payload.r, payload.c)
       boosterPick.value = null
     }
@@ -1178,6 +1222,7 @@ async function onTap(payload) {
   }
   if (boosterPick.value === 'star') {
     if (boosterStar.value > 0) {
+      flashBoosterFx('star')
       await game.applyStarBooster(payload.r, payload.c)
       boosterPick.value = null
     }
@@ -1648,6 +1693,7 @@ async function exitToMenu() {
 }
 
 .play__board-wrap {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1656,6 +1702,51 @@ async function exitToMenu() {
   justify-content: center;
   padding: 0.35rem 0.4rem;
   overflow: hidden;
+}
+
+.play__booster-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.play__booster-flash-icon {
+  width: min(46vw, 168px);
+  height: min(46vw, 168px);
+  object-fit: contain;
+  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.38));
+  animation: play-booster-flash-pop 0.52s cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
+}
+
+@keyframes play-booster-flash-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.38);
+  }
+  42% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play__booster-flash-icon {
+    animation: none;
+    opacity: 0.85;
+    transform: scale(1);
+  }
 }
 
 @keyframes play-booster-hint-in {

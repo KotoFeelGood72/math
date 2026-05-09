@@ -50,6 +50,13 @@
           />
         </div>
       </template>
+
+      <div
+        v-if="clearFx"
+        class="m3board__fx-layer"
+      >
+        <Match3BoardFx :fx="clearFx" :rows="rows" :cols="cols" />
+      </div>
     </div>
   </div>
 </template>
@@ -57,6 +64,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import Match3Cell from '@/components/match3/Match3Cell.vue'
+import Match3BoardFx from '@/components/match3/Match3BoardFx.vue'
 import { BLOCKED } from '@/game/match3Engine.js'
 
 const props = defineProps({
@@ -65,6 +73,8 @@ const props = defineProps({
   stoneHp: { type: Array, default: () => [] },
   selected: { type: Object, default: null },
   matchedKeys: { type: Set, default: () => new Set() },
+  /** Эффект очистки: молнии / лучи ракет */
+  clearFx: { type: Object, default: null },
   spawnedKeys: { type: Set, default: () => new Set() },
   disabled: { type: Boolean, default: false },
   /** "r,c" ячейки для подсказки (покачивание после бездействия). */
@@ -379,6 +389,7 @@ defineExpose({ getMatchCentroidScreen, getCellCenterScreen })
 }
 
 .m3board {
+  position: relative;
   display: grid;
   max-height: 100%;
   /* aspect-ratio задаётся динамически через :style и зависит от формы уровня */
@@ -428,5 +439,15 @@ defineExpose({ getMatchCentroidScreen, getCellCenterScreen })
 .m3board__cell--hole {
   background: transparent;
   pointer-events: none;
+}
+
+.m3board__fx-layer {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  position: relative;
+  pointer-events: none;
+  z-index: 15;
+  min-width: 0;
+  min-height: 0;
 }
 </style>

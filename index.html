@@ -9,9 +9,9 @@
     />
     <meta name="mobile-web-app-capable" content="yes" />
     <!-- Yandex Games SDK — до бандла; тег обязателен для требований Яндекса -->
-    <script async src="/sdk.js"></script>
-    <link rel="stylesheet" href="/fonts/local-fonts.css" />
-    <link rel="icon" href="/favicon.ico" />
+    <script async src="./sdk.js"></script>
+    <link rel="stylesheet" href="./fonts/local-fonts.css" />
+    <link rel="icon" href="./favicon.ico" />
     <title>Match-3</title>
     <style>
       /* До mount Vue и до стилей из App — без этого пустой #app даёт белый экран */
@@ -25,24 +25,27 @@
         box-sizing: border-box;
         min-height: 100%;
         min-height: 100dvh;
-        background: radial-gradient(
-          circle at 0 0,
-          #1a2230 0,
-          #080c14 52%,
-          #020408 100%
-        );
         color: #e8eef5;
         font-family: "Segoe UI", system-ui, sans-serif;
       }
       .avia-boot {
         display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
         align-items: center;
-        justify-content: center;
+        box-sizing: border-box;
         min-height: 100dvh;
+        min-height: 100svh;
+        padding: 0 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+        background: url("./mobile-loader.png") center / cover no-repeat #4ea6e0;
         font-size: 0.95rem;
         font-weight: 600;
         letter-spacing: 0.02em;
-        opacity: 0.85;
+      }
+      @media (min-width: 900px) {
+        .avia-boot {
+          background-image: url("./pc-loader.png");
+        }
       }
     </style>
   </head>
