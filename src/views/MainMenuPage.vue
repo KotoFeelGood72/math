@@ -2,12 +2,7 @@
   <PhoneFrame :parallax="false">
     <div class="menu">
       <header class="menu__topbar">
-        <button
-          type="button"
-          class="menu__cog"
-          aria-label="Настройки"
-          @click="goSettings"
-        >
+        <button type="button" class="menu__cog" aria-label="Настройки" @click="goSettings">
           <Icon icon="mdi:cog" />
         </button>
 
@@ -64,51 +59,42 @@
           actionLabel="ЧИТАТЬ"
           @click="goHowToPlay"
         />
-
       </div>
     </div>
   </PhoneFrame>
 </template>
 
 <script setup>
-defineOptions({ name: 'MainMenuPage' })
+defineOptions({ name: "MainMenuPage" });
 
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { storeToRefs } from 'pinia'
-import PhoneFrame from '@/components/PhoneFrame.vue'
-import MenuCardButton from '@/components/MenuCardButton.vue'
-import { useMatch3ProgressStore } from '@/stores/match3Progress'
-import { Icon } from '@iconify/vue'
+import { computed } from "vue";
+import { useRouter } from "vue-router";
+import { storeToRefs } from "pinia";
+import PhoneFrame from "@/components/PhoneFrame.vue";
+import MenuCardButton from "@/components/MenuCardButton.vue";
+import { useMatch3ProgressStore } from "@/stores/match3Progress";
+import { Icon } from "@iconify/vue";
 
-const router = useRouter()
-const logoUrl = `${import.meta.env.BASE_URL}logo.png`
-const progress = useMatch3ProgressStore()
-const {
-  highestUnlocked,
-  totalStars,
-  totalLevels,
-  completedCount,
-  coins,
-} = storeToRefs(progress)
+const router = useRouter();
+const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
+const progress = useMatch3ProgressStore();
+const { highestUnlocked, totalStars, totalLevels, completedCount, coins } = storeToRefs(progress);
 
-const playLabel = computed(() =>
-  progress.completedCount > 0 ? 'Продолжить' : 'Играть',
-)
+const playLabel = computed(() => (progress.completedCount > 0 ? "Продолжить" : "Играть"));
 
 function playNext() {
   // Первый запуск: сначала учебный уровень.
-  const id = progress.needsTutorial ? 1 : highestUnlocked.value
-  router.push({ name: 'play', params: { id } })
+  const id = progress.needsTutorial ? 1 : highestUnlocked.value;
+  router.push({ name: "play", params: { id } });
 }
 function goLevels() {
-  router.push({ name: 'levels' })
+  router.push({ name: "levels" });
 }
 function goHowToPlay() {
-  router.push({ name: 'how-to-play' })
+  router.push({ name: "how-to-play" });
 }
 function goSettings() {
-  router.push({ name: 'settings' })
+  router.push({ name: "settings" });
 }
 </script>
 
@@ -118,6 +104,7 @@ function goSettings() {
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   padding: 0 0.85rem 1rem;
   box-sizing: border-box;
   color: var(--m3-text);
@@ -178,14 +165,14 @@ function goSettings() {
   object-fit: contain;
   user-select: none;
   pointer-events: none;
-  filter: drop-shadow(0 4px 0 rgba(110, 57, 17, 0.35))
-    drop-shadow(0 2px 12px rgba(0, 40, 90, 0.18));
+  filter: drop-shadow(0 4px 0 rgba(110, 57, 17, 0.35)) drop-shadow(0 2px 12px rgba(0, 40, 90, 0.18));
 }
 
 .menu__cards {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 0.85rem;
-  margin-top: auto;
+  /* margin-top: auto; */
 }
 </style>

@@ -1411,7 +1411,7 @@ async function exitToMenu() {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.35rem 0.45rem;
-  padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
+  padding: max(0.42rem, env(safe-area-inset-top, 0px)) 0.7rem 0.28rem;
 }
 
 .play__top-left {
@@ -1502,13 +1502,13 @@ async function exitToMenu() {
 .play__hud {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.5rem 0.65rem 0;
+  gap: 0.28rem;
+  padding: 0.32rem 0.65rem 0;
 }
 
 .play__hud-card--booster-mode {
-  padding-top: 0.55rem;
-  padding-bottom: 0.58rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.42rem;
 }
 
 .play__goals-booster-hint {
@@ -1553,7 +1553,7 @@ async function exitToMenu() {
     0 3px 0 rgba(110, 57, 17, 0.55);
 }
 .play__hud-card--goals {
-  padding: 0.62rem 0.85rem 0.65rem;
+  padding: 0.42rem 0.8rem 0.45rem;
   gap: 0;
   border-color: #5c5852;
 }
@@ -1573,7 +1573,7 @@ async function exitToMenu() {
 .play__goals-stack {
   display: flex;
   flex-direction: column;
-  gap: 0.42rem;
+  gap: 0.26rem;
   min-width: 0;
 }
 .play__goals-row {
@@ -1700,7 +1700,7 @@ async function exitToMenu() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0.4rem;
+  padding: 0.2rem 0.4rem;
   overflow: hidden;
 }
 

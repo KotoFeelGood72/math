@@ -47,9 +47,9 @@ const cardModifier = computed(() => {
 <style scoped>
 .menu-card {
   display: grid;
-  grid-template-columns: 3.4rem 1fr auto;
+  grid-template-columns: 2.65rem 1fr auto;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.58rem;
   padding: 0.65rem 0.65rem 0.65rem 0.75rem;
   font-family: inherit;
   cursor: pointer;
@@ -64,9 +64,9 @@ const cardModifier = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 14px;
+  width: 2.45rem;
+  height: 2.45rem;
+  border-radius: 11px;
   border: 3px solid var(--m3-border-dark);
   background: linear-gradient(180deg, #fff7d8 0%, #ffd672 100%);
   color: #6e3911;
@@ -77,8 +77,8 @@ const cardModifier = computed(() => {
     0 2px 0 rgba(110, 57, 17, 0.45);
 }
 .menu-card__icon :deep(svg) {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 1.38rem;
+  height: 1.38rem;
   display: block;
 }
 
