@@ -159,8 +159,8 @@ function goSettings() {
 }
 .menu__logo {
   display: block;
-  width: min(98vw, 27rem);
-  max-height: min(50vh, 17.5rem);
+  /* width: min(98vw, 27rem);
+  max-height: min(50vh, 17.5rem); */
   height: auto;
   object-fit: contain;
   user-select: none;
