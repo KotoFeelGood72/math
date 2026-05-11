@@ -28,6 +28,7 @@ import {
   placeSpecial,
   refill,
   removeCells,
+  reshuffleBoardPreservingPieces,
   swap as swapBoard,
 } from '@/game/match3Engine.js'
 import { createRng } from '@/game/rng.js'
@@ -360,6 +361,15 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
 
     if (!hasAnyMove(board.value, stoneHp.value)) {
       await wait(220)
+      const shuffled = reshuffleBoardPreservingPieces(
+        board.value,
+        stoneHp.value,
+        rng,
+      )
+      if (shuffled) {
+        board.value = shuffled
+        return
+      }
       let rebuilt = board.value
       for (let i = 0; i < 48; i += 1) {
         rebuilt = buildLevelBoard({

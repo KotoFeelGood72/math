@@ -14,6 +14,81 @@
         <div class="settings__top-spacer" />
       </header>
 
+      <section
+        class="settings__panel m3-modal-panel settings__sound-block"
+        aria-labelledby="settings-sound-h"
+      >
+        <h2 id="settings-sound-h" class="settings__panel-title">Звук</h2>
+
+        <div class="settings__toggle-row">
+          <span class="settings__toggle-label" id="settings-music-l">
+            Фоновая музыка
+          </span>
+          <button
+            type="button"
+            class="settings__switch"
+            role="switch"
+            aria-labelledby="settings-music-l"
+            :aria-checked="musicEnabled"
+            @click="audio.toggleMusicEnabled()"
+          >
+            <span class="settings__switch-track" aria-hidden="true">
+              <span class="settings__switch-knob" />
+            </span>
+          </button>
+        </div>
+
+        <div class="settings__toggle-row">
+          <span class="settings__toggle-label" id="settings-sfx-l">
+            Звуковые эффекты
+          </span>
+          <button
+            type="button"
+            class="settings__switch"
+            role="switch"
+            aria-labelledby="settings-sfx-l"
+            :aria-checked="sfxEnabled"
+            @click="audio.toggleSfxEnabled()"
+          >
+            <span class="settings__switch-track" aria-hidden="true">
+              <span class="settings__switch-knob" />
+            </span>
+          </button>
+        </div>
+
+        <div
+          class="settings__sound-row"
+          role="group"
+          aria-labelledby="settings-master-l"
+          @wheel.stop
+        >
+          <span id="settings-master-l" class="settings__range-label">Громкость</span>
+          <input
+            class="settings__range"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            :value="volume"
+            :aria-valuetext="volumeAriaText"
+            @input="onVolumeInput"
+            @change="onVolumeInput"
+          />
+          <button
+            type="button"
+            class="settings__mute m3-round-icon-btn"
+            :aria-label="muted ? 'Включить звук' : 'Выключить звук'"
+            :aria-pressed="muted"
+            @click="audio.toggleMuted()"
+          >
+            <Icon
+              class="settings__mute-icon"
+              :icon="muted ? 'mdi:volume-off' : 'mdi:volume-high'"
+            />
+          </button>
+        </div>
+      </section>
+
       <Swiper
         class="settings__swiper"
         :modules="swiperModules"
@@ -22,83 +97,6 @@
         :freeMode="{ enabled: true, sticky: false }"
         :mousewheel="{ forceToAxis: true, releaseOnEdges: true }"
       >
-        <SwiperSlide class="settings__slide">
-          <section
-            class="settings__panel m3-modal-panel"
-            aria-labelledby="settings-sound-h"
-          >
-            <h2 id="settings-sound-h" class="settings__panel-title">Звук</h2>
-
-            <div class="settings__toggle-row">
-              <span class="settings__toggle-label" id="settings-music-l">
-                Фоновая музыка
-              </span>
-              <button
-                type="button"
-                class="settings__switch"
-                role="switch"
-                aria-labelledby="settings-music-l"
-                :aria-checked="musicEnabled"
-                @click="audio.toggleMusicEnabled()"
-              >
-                <span class="settings__switch-track" aria-hidden="true">
-                  <span class="settings__switch-knob" />
-                </span>
-              </button>
-            </div>
-
-            <div class="settings__toggle-row">
-              <span class="settings__toggle-label" id="settings-sfx-l">
-                Звуковые эффекты
-              </span>
-              <button
-                type="button"
-                class="settings__switch"
-                role="switch"
-                aria-labelledby="settings-sfx-l"
-                :aria-checked="sfxEnabled"
-                @click="audio.toggleSfxEnabled()"
-              >
-                <span class="settings__switch-track" aria-hidden="true">
-                  <span class="settings__switch-knob" />
-                </span>
-              </button>
-            </div>
-
-            <div
-              class="settings__sound-row"
-              role="group"
-              aria-labelledby="settings-master-l"
-            >
-              <span id="settings-master-l" class="settings__range-label"
-                >Громкость</span
-              >
-              <input
-                class="settings__range"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                :value="volume"
-                :aria-valuetext="volumeAriaText"
-                @input="onVolumeInput"
-              />
-              <button
-                type="button"
-                class="settings__mute m3-round-icon-btn"
-                :aria-label="muted ? 'Включить звук' : 'Выключить звук'"
-                :aria-pressed="muted"
-                @click="audio.toggleMuted()"
-              >
-                <Icon
-                  class="settings__mute-icon"
-                  :icon="muted ? 'mdi:volume-off' : 'mdi:volume-high'"
-                />
-              </button>
-            </div>
-          </section>
-        </SwiperSlide>
-
         <SwiperSlide class="settings__slide">
           <section
             class="settings__panel m3-modal-panel"
@@ -198,7 +196,12 @@ const volumeAriaText = computed(() => {
 })
 
 function onVolumeInput(e) {
-  audio.setVolume(e.target.valueAsNumber)
+  const raw = /** @type {HTMLInputElement} */ (e.target).valueAsNumber
+  let n = typeof raw === 'number' ? raw : Number.NaN
+  if (!Number.isFinite(n))
+    n = Number.parseFloat(/** @type {HTMLInputElement} */ (e.target).value)
+  if (!Number.isFinite(n)) return
+  audio.setVolume(n)
 }
 function goBack() {
   router.push({ name: 'menu' })
@@ -399,6 +402,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   opacity: 0.9;
 }
 
+.settings__sound-block {
+  flex-shrink: 0;
+  width: calc(100% - 1.4rem);
+  margin: 0.6rem clamp(0.55rem, 2vw, 0.85rem) 0.45rem;
+  align-self: center;
+  box-sizing: border-box;
+}
+
 .settings__range {
   flex: 1;
   min-width: 0;
@@ -408,6 +419,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   background: rgba(110, 57, 17, 0.25);
   border: 2px solid rgba(74, 40, 16, 0.45);
   outline: none;
+  touch-action: pan-x;
 }
 
 .settings__range::-webkit-slider-thumb {
@@ -453,7 +465,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   flex: 1;
   min-height: 0;
   width: 100%;
-  padding: 0.75rem 0.7rem 0.6rem;
+  padding: 0 0.7rem 0.6rem;
   box-sizing: border-box;
 }
 

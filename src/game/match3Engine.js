@@ -550,6 +550,44 @@ export function applyGravity(board) {
   return next
 }
 
+/**
+ * Если нет возможных ходов, перемешивает уже стоящие на поле фишки (мультимножество то же),
+ * не трогая BLOCKED и пустые клетки. Подбирает расстановку без мгновенных матчей и с ≥1 ходом.
+ * @returns {number[][] | null}
+ */
+export function reshuffleBoardPreservingPieces(board, stoneHp, rng, maxAttempts = 160) {
+  const rows = board.length
+  const cols = board[0]?.length ?? 0
+  if (!rows || !cols) return null
+
+  const positions = []
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const v = board[r][c]
+      if (v === BLOCKED || v === EMPTY) continue
+      positions.push([r, c])
+    }
+  }
+  const n = positions.length
+  if (n === 0) return null
+
+  let values = positions.map(([r, c]) => board[r][c])
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    for (let i = n - 1; i > 0; i -= 1) {
+      const j = Math.floor(rng() * (i + 1))
+      ;[values[i], values[j]] = [values[j], values[i]]
+    }
+    const next = cloneBoard(board)
+    for (let i = 0; i < n; i += 1) {
+      const [r, c] = positions[i]
+      next[r][c] = values[i]
+    }
+    if (findMatches(next, stoneHp).length === 0 && hasAnyMove(next, stoneHp)) return next
+  }
+  return null
+}
+
 /** Заполнить пустые ячейки сверху случайными цветами. Заблокированные пропускаем. */
 export function refill(board, colors, rng) {
   const rows = board.length
@@ -588,7 +626,10 @@ export function hasAnyMove(board, stoneHp = null) {
           if (nr >= 0 && nc >= 0 && nr < rows && nc < cols) {
             if (board[nr][nc] === BLOCKED) continue
             if (pieceLockedByStone(stoneHp, nr, nc)) continue
-            if (getColor(board[nr][nc]) >= 0) return true
+            const nv = board[nr][nc]
+            // Две радужные рядом — валидный своп (как в attemptSwap): иначе ложный «тупик».
+            if (isRainbow(nv)) return true
+            if (getColor(nv) >= 0) return true
           }
         }
       }
@@ -656,6 +697,9 @@ export function findHintSwap(board, stoneHp = null) {
           if (getColor(board[nr][nc]) >= 0) {
             return { from: { r, c }, to: { r: nr, c: nc } }
           }
+          if (isRainbow(board[nr][nc])) {
+            return { from: { r, c }, to: { r: nr, c: nc } }
+          }
         }
       }
 
@@ -671,6 +715,7 @@ export function findHintSwap(board, stoneHp = null) {
           }
           const va = board[r][c]
           const vb = board[r][c + 1]
+          if (isRainbow(va) && isRainbow(vb)) return { from: a, to: b }
           if (isRainbow(va) && getColor(vb) >= 0) return { from: a, to: b }
           if (isRainbow(vb) && getColor(va) >= 0) return { from: a, to: b }
         }
@@ -688,6 +733,7 @@ export function findHintSwap(board, stoneHp = null) {
           }
           const va = board[r][c]
           const vb = board[r + 1][c]
+          if (isRainbow(va) && isRainbow(vb)) return { from: a, to: b }
           if (isRainbow(va) && getColor(vb) >= 0) return { from: a, to: b }
           if (isRainbow(vb) && getColor(va) >= 0) return { from: a, to: b }
         }

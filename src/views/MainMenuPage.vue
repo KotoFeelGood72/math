@@ -150,22 +150,22 @@ function goSettings() {
 }
 
 .menu__logo-wrap {
-  /* margin: 2.35rem auto; */
   display: flex;
   justify-content: center;
   align-items: center;
   flex-shrink: 0;
-  margin-top: 30px;
+  max-width: 200px;
+  margin: 0 auto;
 }
 .menu__logo {
   display: block;
-  /* width: min(98vw, 27rem);
-  max-height: min(50vh, 17.5rem); */
   height: auto;
   object-fit: contain;
   user-select: none;
   pointer-events: none;
   filter: drop-shadow(0 4px 0 rgba(110, 57, 17, 0.35)) drop-shadow(0 2px 12px rgba(0, 40, 90, 0.18));
+  width: 100%;
+  height: 100%;
 }
 
 .menu__cards {

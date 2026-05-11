@@ -70,7 +70,9 @@ export const useAudioSettingsStore = defineStore('audio-settings', () => {
    * @param {number} v 0..1
    */
   function setVolume(v) {
-    const next = Math.min(1, Math.max(0, v))
+    const n = typeof v === 'number' ? v : Number(v)
+    if (!Number.isFinite(n)) return
+    const next = Math.min(1, Math.max(0, n))
     volume.value = next
     if (next > 0) {
       muted.value = false

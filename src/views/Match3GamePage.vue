@@ -6,14 +6,6 @@
           <button
             type="button"
             class="play__back"
-            aria-label="В меню"
-            @click="exitToMenu"
-          >
-            <Icon icon="mdi:chevron-left" />
-          </button>
-          <button
-            type="button"
-            class="play__back"
             :disabled="status !== 'playing'"
             aria-label="Пауза"
             @click="openPause"
@@ -110,19 +102,6 @@
                   <span class="play__goal-count">{{ progressText }}</span>
                 </div>
               </div>
-            </div>
-            <div
-              class="play__goals-bar"
-              role="progressbar"
-              :aria-valuenow="combinedGoalsPercent"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              :aria-label="`Общий прогресс целей: ${combinedGoalsPercent}%`"
-            >
-              <div
-                class="play__goals-bar-fill"
-                :style="{ width: `${combinedGoalsPercent}%` }"
-              />
             </div>
           </div>
         </div>
@@ -869,19 +848,6 @@ const progressText = computed(() => {
   return `${shown} / ${t}`
 })
 
-/** Средний прогресс по целям (камни + основная) для общей полосы. */
-const combinedGoalsProgress = computed(() => {
-  const main = game.objectiveProgress.ratio
-  const st = game.stoneProgress
-  if (st.target <= 0) return Math.min(1, Math.max(0, main))
-  const avg = (st.ratio + main) / 2
-  return Math.min(1, Math.max(0, avg))
-})
-
-const combinedGoalsPercent = computed(() =>
-  Math.round(combinedGoalsProgress.value * 100),
-)
-
 function spawnScoreFlyCoins(keySet) {
   if (!keySet || keySet.size === 0) return
   void nextTick(() => {
@@ -1595,29 +1561,6 @@ async function exitToMenu() {
 }
 .play__goals-row::-webkit-scrollbar {
   display: none;
-}
-.play__goals-bar {
-  width: 100%;
-  height: 0.52rem;
-  border-radius: 999px;
-  border: 2px solid var(--m3-border-dark);
-  background: rgba(110, 57, 17, 0.22);
-  overflow: hidden;
-  box-shadow: inset 0 1px 2px rgba(110, 57, 17, 0.28);
-  flex-shrink: 0;
-}
-.play__goals-bar-fill {
-  height: 100%;
-  max-width: 100%;
-  border-radius: 999px;
-  background: linear-gradient(
-    180deg,
-    #c8e85c 0%,
-    #7cc232 45%,
-    #3d7a18 100%
-  );
-  transition: width 0.28s ease;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 .play__goal-item {
   display: inline-flex;
