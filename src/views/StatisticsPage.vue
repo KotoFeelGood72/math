@@ -1,6 +1,6 @@
 <template>
   <PhoneFrame :parallax="false">
-    <div class="stats">
+    <div class="stats" data-allow-browser-scroll>
       <header class="stats__top">
         <button
           type="button"
@@ -14,70 +14,55 @@
         <div class="stats__top-spacer" />
       </header>
 
-      <Swiper
-        class="stats__swiper"
-        :modules="swiperModules"
-        direction="vertical"
-        :slidesPerView="'auto'"
-        :freeMode="{ enabled: true, sticky: false }"
-        :mousewheel="{ forceToAxis: true, releaseOnEdges: true }"
-      >
-        <SwiperSlide class="stats__slide">
-          <section class="stats__panel stats__panel--lead m3-modal-panel">
-            <p class="stats__lead">Накапливается с каждым ходом.</p>
-          </section>
-        </SwiperSlide>
+      <div class="stats__sections">
+        <section class="stats__panel stats__panel--lead m3-modal-panel">
+          <p class="stats__lead">Накапливается с каждым ходом.</p>
+        </section>
 
-        <SwiperSlide class="stats__slide">
-          <section class="stats__panel m3-modal-panel" aria-labelledby="stats-progression-h">
-            <h2 id="stats-progression-h" class="stats__panel-title">Прогрессия</h2>
-            <div class="stats__grid">
-              <article
-                v-for="row in primaryRows"
-                :key="row.key"
-                class="stats__card"
-              >
-                <div class="stats__card-label">{{ row.label }}</div>
-                <div class="stats__card-value">{{ row.value }}</div>
-              </article>
-            </div>
-          </section>
-        </SwiperSlide>
+        <section class="stats__panel m3-modal-panel" aria-labelledby="stats-progression-h">
+          <h2 id="stats-progression-h" class="stats__panel-title">Прогрессия</h2>
+          <div class="stats__grid">
+            <article
+              v-for="row in primaryRows"
+              :key="row.key"
+              class="stats__card"
+            >
+              <div class="stats__card-label">{{ row.label }}</div>
+              <div class="stats__card-value">{{ row.value }}</div>
+            </article>
+          </div>
+        </section>
 
-        <SwiperSlide class="stats__slide">
-          <section class="stats__panel m3-modal-panel" aria-labelledby="stats-activity-h">
-            <h2 id="stats-activity-h" class="stats__panel-title">
-              Игровая активность
-            </h2>
-            <div class="stats__grid">
-              <article
-                v-for="row in activityRows"
-                :key="row.key"
-                class="stats__card"
-              >
-                <div class="stats__card-label">{{ row.label }}</div>
-                <div class="stats__card-value">{{ row.value }}</div>
-              </article>
-            </div>
-          </section>
-        </SwiperSlide>
+        <section class="stats__panel m3-modal-panel" aria-labelledby="stats-activity-h">
+          <h2 id="stats-activity-h" class="stats__panel-title">
+            Игровая активность
+          </h2>
+          <div class="stats__grid">
+            <article
+              v-for="row in activityRows"
+              :key="row.key"
+              class="stats__card"
+            >
+              <div class="stats__card-label">{{ row.label }}</div>
+              <div class="stats__card-value">{{ row.value }}</div>
+            </article>
+          </div>
+        </section>
 
-        <SwiperSlide class="stats__slide">
-          <section class="stats__panel m3-modal-panel" aria-labelledby="stats-records-h">
-            <h2 id="stats-records-h" class="stats__panel-title">Рекорды</h2>
-            <div class="stats__grid">
-              <article
-                v-for="row in recordRows"
-                :key="row.key"
-                class="stats__card"
-              >
-                <div class="stats__card-label">{{ row.label }}</div>
-                <div class="stats__card-value">{{ row.value }}</div>
-              </article>
-            </div>
-          </section>
-        </SwiperSlide>
-      </Swiper>
+        <section class="stats__panel m3-modal-panel" aria-labelledby="stats-records-h">
+          <h2 id="stats-records-h" class="stats__panel-title">Рекорды</h2>
+          <div class="stats__grid">
+            <article
+              v-for="row in recordRows"
+              :key="row.key"
+              class="stats__card"
+            >
+              <div class="stats__card-label">{{ row.label }}</div>
+              <div class="stats__card-value">{{ row.value }}</div>
+            </article>
+          </div>
+        </section>
+      </div>
 
       <footer class="stats__bottom-bar">
         <MenuActionButton
@@ -101,8 +86,6 @@ import { storeToRefs } from 'pinia'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import MenuActionButton from '@/components/MenuActionButton.vue'
 import { Icon } from '@iconify/vue'
-import { Swiper, SwiperSlide } from 'swiper/vue'
-import { FreeMode, Mousewheel } from 'swiper'
 import { useMatch3StatsStore } from '@/stores/match3Stats'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
 
@@ -120,8 +103,6 @@ const {
   levelsWon,
 } = storeToRefs(stats)
 const { totalStars, completedCount, totalLevels } = storeToRefs(progress)
-
-const swiperModules = [FreeMode, Mousewheel]
 
 const primaryRows = computed(() => [
   {
@@ -170,6 +151,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   flex-direction: column;
   min-height: 0;
   color: var(--m3-text);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Шапка — как на экране настроек */
@@ -179,7 +163,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   align-items: center;
   gap: 0.35rem 0.45rem;
   padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
-  flex-shrink: 0;
 }
 
 .stats__back {
@@ -230,22 +213,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   width: 2.4rem;
 }
 
-.stats__swiper {
-  flex: 1;
-  min-height: 0;
+.stats__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
   width: 100%;
   padding: 0.75rem 0.7rem 0.6rem;
   box-sizing: border-box;
-}
-
-.stats__swiper :deep(.swiper-slide:not(:last-child)) {
-  margin-bottom: 0.65rem;
-}
-
-.stats__slide {
-  height: auto;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
 }
 
 .stats__panel {
@@ -326,7 +301,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .stats__bottom-bar {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   padding: 0.55rem 0.7rem max(0.65rem, env(safe-area-inset-bottom, 0px));
   background: linear-gradient(
     180deg,

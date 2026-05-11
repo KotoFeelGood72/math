@@ -14,7 +14,8 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
   const coins = ref(0)
   const tutorialDone = ref(false)
 
-  const needsTutorial = computed(() => completedCount.value === 0 && !tutorialDone.value)
+  /** Обучение только при первом запуске; флаг хранится в облаке Я.Игр (`tutorialDone`). */
+  const needsTutorial = computed(() => !tutorialDone.value)
 
   const highestUnlocked = computed(() => {
     let h = 1
@@ -91,8 +92,21 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     if (typeof snap.coins === 'number' && Number.isFinite(snap.coins)) {
       coins.value = Math.max(0, snap.coins | 0)
     }
-    if (typeof snap.tutorialDone === 'boolean') {
+    const hadTutorialFlag = typeof snap.tutorialDone === 'boolean'
+    if (hadTutorialFlag) {
       tutorialDone.value = snap.tutorialDone
+    }
+    if (!hadTutorialFlag) {
+      let anyLevelDone = false
+      for (const k in levels.value) {
+        if ((levels.value[k].stars || 0) > 0) {
+          anyLevelDone = true
+          break
+        }
+      }
+      if (anyLevelDone) {
+        tutorialDone.value = true
+      }
     }
   }
 

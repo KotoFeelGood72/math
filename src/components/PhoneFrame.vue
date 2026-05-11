@@ -5,7 +5,7 @@ defineProps({
     type: Boolean,
     default: true,
   },
-})
+});
 </script>
 
 <template>
@@ -40,12 +40,7 @@ defineProps({
   overflow: hidden;
   touch-action: none;
   overscroll-behavior: none;
-  background: linear-gradient(
-    180deg,
-    #b9e3fa 0%,
-    #88cdf0 55%,
-    #4ea6e0 100%
-  );
+  background: linear-gradient(180deg, #b9e3fa 0%, #88cdf0 55%, #4ea6e0 100%);
 }
 
 /* Один непрерывный слой: repeat-x + один мотив = ширина вьюпорта — без вертикального «шва» от двух cover */
@@ -63,7 +58,7 @@ defineProps({
   top: -5%;
   width: 200%;
   height: 110%;
-  background-image: url('@/assets/images/bg.png');
+  background-image: url("@/assets/images/bg.png");
   background-repeat: repeat-x;
   /* Один повтор ровно на ширину вьюпорта родителя — цикл translateX(-50%) совпадает с периодом */
   background-size: 50% 100%;
@@ -112,12 +107,7 @@ defineProps({
   max-height: min(92vh, 780px);
   border-radius: 26px;
   padding: 4px;
-  background: linear-gradient(
-    145deg,
-    #ffe27a 0%,
-    #ff9d1f 45%,
-    #6e3911 100%
-  );
+  background: linear-gradient(145deg, #ffe27a 0%, #ff9d1f 45%, #6e3911 100%);
   box-shadow:
     0 0 0 1px rgba(110, 57, 17, 0.5),
     0 24px 60px rgba(60, 30, 10, 0.55),
@@ -132,11 +122,7 @@ defineProps({
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(
-    180deg,
-    #b9e3fa 0%,
-    #6ec4ea 100%
-  );
+  background: linear-gradient(180deg, #b9e3fa 0%, #6ec4ea 100%);
 }
 
 /* Контент-слот поверх дрейфующего фона */

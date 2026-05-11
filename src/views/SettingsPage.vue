@@ -1,6 +1,6 @@
 <template>
   <PhoneFrame :parallax="false">
-    <div class="settings">
+    <div class="settings" data-allow-browser-scroll>
       <header class="settings__top">
         <button
           type="button"
@@ -89,67 +89,56 @@
         </div>
       </section>
 
-      <Swiper
-        class="settings__swiper"
-        :modules="swiperModules"
-        direction="vertical"
-        :slidesPerView="'auto'"
-        :freeMode="{ enabled: true, sticky: false }"
-        :mousewheel="{ forceToAxis: true, releaseOnEdges: true }"
-      >
-        <SwiperSlide class="settings__slide">
-          <section
-            class="settings__panel m3-modal-panel"
-            aria-labelledby="settings-progress-h"
+      <div class="settings__sections">
+        <section
+          class="settings__panel m3-modal-panel"
+          aria-labelledby="settings-progress-h"
+        >
+          <h2 id="settings-progress-h" class="settings__panel-title">
+            Прогресс
+          </h2>
+          <p class="settings__progress-lead">
+            Пройдено
+            <span class="settings__progress-num">{{ completedCount }}</span> из
+            <span class="settings__progress-num">{{ totalLevels }}</span>
+            ({{ progressPercent }}%)
+          </p>
+          <div
+            class="settings__progress-track"
+            role="progressbar"
+            :aria-valuenow="progressPercent"
+            aria-valuemin="0"
+            aria-valuemax="100"
           >
-            <h2 id="settings-progress-h" class="settings__panel-title">
-              Прогресс
-            </h2>
-            <p class="settings__progress-lead">
-              Пройдено
-              <span class="settings__progress-num">{{ completedCount }}</span> из
-              <span class="settings__progress-num">{{ totalLevels }}</span>
-              ({{ progressPercent }}%)
-            </p>
             <div
-              class="settings__progress-track"
-              role="progressbar"
-              :aria-valuenow="progressPercent"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
-              <div
-                class="settings__progress-fill"
-                :style="{ width: `${progressPercent}%` }"
-              />
-            </div>
-          </section>
-        </SwiperSlide>
+              class="settings__progress-fill"
+              :style="{ width: `${progressPercent}%` }"
+            />
+          </div>
+        </section>
 
-        <SwiperSlide class="settings__slide">
-          <section class="settings__panel m3-modal-panel" aria-label="Навигация">
-            <h2 class="settings__panel-title settings__panel-title--solo">
-              Разделы
-            </h2>
-            <button
-              type="button"
-              class="settings__link-row"
-              @click="goStatistics"
-            >
-              <span class="settings__link-label">Статистика</span>
-              <span class="settings__link-chevron" aria-hidden="true">
-                <Icon icon="mdi:chevron-right" />
-              </span>
-            </button>
-            <button type="button" class="settings__link-row" @click="goProfile">
-              <span class="settings__link-label">Профиль</span>
-              <span class="settings__link-chevron" aria-hidden="true">
-                <Icon icon="mdi:chevron-right" />
-              </span>
-            </button>
-          </section>
-        </SwiperSlide>
-      </Swiper>
+        <section class="settings__panel m3-modal-panel" aria-label="Навигация">
+          <h2 class="settings__panel-title settings__panel-title--solo">
+            Разделы
+          </h2>
+          <button
+            type="button"
+            class="settings__link-row"
+            @click="goStatistics"
+          >
+            <span class="settings__link-label">Статистика</span>
+            <span class="settings__link-chevron" aria-hidden="true">
+              <Icon icon="mdi:chevron-right" />
+            </span>
+          </button>
+          <button type="button" class="settings__link-row" @click="goProfile">
+            <span class="settings__link-label">Профиль</span>
+            <span class="settings__link-chevron" aria-hidden="true">
+              <Icon icon="mdi:chevron-right" />
+            </span>
+          </button>
+        </section>
+      </div>
 
       <footer class="settings__bottom-bar">
         <MenuActionButton
@@ -173,8 +162,6 @@ import { storeToRefs } from 'pinia'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import MenuActionButton from '@/components/MenuActionButton.vue'
 import { Icon } from '@iconify/vue'
-import { Swiper, SwiperSlide } from 'swiper/vue'
-import { FreeMode, Mousewheel } from 'swiper'
 import {
   useAudioSettingsStore,
   useAudioSettingsStoreRefs,
@@ -187,8 +174,6 @@ const { volume, muted, musicEnabled, sfxEnabled } =
   useAudioSettingsStoreRefs()
 const progress = useMatch3ProgressStore()
 const { completedCount, totalLevels, progressPercent } = storeToRefs(progress)
-
-const swiperModules = [FreeMode, Mousewheel]
 
 const volumeAriaText = computed(() => {
   const pct = Math.round((muted.value ? 0 : volume.value) * 100)
@@ -229,6 +214,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   flex-direction: column;
   min-height: 0;
   color: var(--m3-text);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Шапка — как на экране уровня */
@@ -238,7 +226,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   align-items: center;
   gap: 0.35rem 0.45rem;
   padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
-  flex-shrink: 0;
 }
 
 .settings__back {
@@ -403,11 +390,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .settings__sound-block {
-  flex-shrink: 0;
   width: calc(100% - 1.4rem);
   margin: 0.6rem clamp(0.55rem, 2vw, 0.85rem) 0.45rem;
   align-self: center;
   box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+.settings__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0 0.7rem 0.6rem;
+  box-sizing: border-box;
+  flex: 0 0 auto;
 }
 
 .settings__range {
@@ -459,24 +456,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 .settings__mute-icon :deep(svg) {
   width: 1.3rem;
   height: 1.3rem;
-}
-
-.settings__swiper {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  padding: 0 0.7rem 0.6rem;
-  box-sizing: border-box;
-}
-
-.settings__swiper :deep(.swiper-slide:not(:last-child)) {
-  margin-bottom: 0.65rem;
-}
-
-.settings__slide {
-  height: auto;
-  display: flex;
-  flex-direction: column;
 }
 
 .settings__progress-lead {
@@ -548,7 +527,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .settings__bottom-bar {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   padding: 0.55rem 0.7rem max(0.65rem, env(safe-area-inset-bottom, 0px));
   /* Непрозрачный слой — иначе сквозь полупрозрачность видны облака параллакса */
   background: linear-gradient(

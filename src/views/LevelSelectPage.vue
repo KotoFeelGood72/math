@@ -1,6 +1,6 @@
 <template>
   <PhoneFrame :parallax="false">
-    <div class="lvl-page">
+    <div class="lvl-page" data-allow-browser-scroll>
       <header class="lvl-page__top">
         <button
           type="button"
@@ -19,54 +19,39 @@
       </header>
 
       <div class="lvl-page__panel m3-wood-panel">
-        <Swiper
-          class="lvl-page__swiper"
-          :modules="swiperModules"
-          direction="vertical"
-          :slidesPerView="'auto'"
-          :freeMode="{ enabled: true, sticky: false }"
-          :mousewheel="{ forceToAxis: true, releaseOnEdges: true }"
-        >
-          <SwiperSlide class="lvl-page__slide lvl-page__slide--head">
-            <span class="m3-ribbon lvl-page__ribbon">Выбор уровня</span>
-          </SwiperSlide>
-          <SwiperSlide
-            v-for="(page, idx) in levelPages"
-            :key="idx"
-            class="lvl-page__slide"
-          >
-            <div class="lvl-page__grid">
-              <button
-                v-for="lv in page"
-                :key="lv"
-                type="button"
-                class="lvl-tile"
-                :class="{
-                  'lvl-tile--locked': !progress.isUnlocked(lv),
-                  'lvl-tile--current':
-                    progress.isUnlocked(lv) && lv === progress.highestUnlocked,
-                }"
-                :disabled="!progress.isUnlocked(lv)"
-                @click="play(lv)"
+        <span class="m3-ribbon lvl-page__ribbon">Выбор уровня</span>
+        <div v-for="(page, idx) in levelPages" :key="idx" class="lvl-page__grid-wrap">
+          <div class="lvl-page__grid">
+            <button
+              v-for="lv in page"
+              :key="lv"
+              type="button"
+              class="lvl-tile"
+              :class="{
+                'lvl-tile--locked': !progress.isUnlocked(lv),
+                'lvl-tile--current':
+                  progress.isUnlocked(lv) && lv === progress.highestUnlocked,
+              }"
+              :disabled="!progress.isUnlocked(lv)"
+              @click="play(lv)"
+            >
+              <span class="lvl-tile__num">{{ lv }}</span>
+              <StarRow
+                :value="progress.getLevel(lv).stars"
+                :max="3"
+                size="sm"
+                class="lvl-tile__stars"
+              />
+              <span
+                v-if="!progress.isUnlocked(lv)"
+                class="lvl-tile__lock"
+                aria-hidden="true"
               >
-                <span class="lvl-tile__num">{{ lv }}</span>
-                <StarRow
-                  :value="progress.getLevel(lv).stars"
-                  :max="3"
-                  size="sm"
-                  class="lvl-tile__stars"
-                />
-                <span
-                  v-if="!progress.isUnlocked(lv)"
-                  class="lvl-tile__lock"
-                  aria-hidden="true"
-                >
-                  <Icon icon="mdi:lock" />
-                </span>
-              </button>
-            </div>
-          </SwiperSlide>
-        </Swiper>
+                <Icon icon="mdi:lock" />
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </PhoneFrame>
@@ -82,14 +67,10 @@ import PhoneFrame from '@/components/PhoneFrame.vue'
 import StarRow from '@/components/StarRow.vue'
 import { Icon } from '@iconify/vue'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
-import { Swiper, SwiperSlide } from 'swiper/vue'
-import { FreeMode, Mousewheel } from 'swiper'
 
 const router = useRouter()
 const progress = useMatch3ProgressStore()
 const { totalLevels, totalStars } = storeToRefs(progress)
-
-const swiperModules = [FreeMode, Mousewheel]
 
 const LEVELS_PER_PAGE = 20
 const allLevels = computed(() =>
@@ -122,7 +103,9 @@ function goBack() {
   padding: 0 0.75rem 1rem;
   box-sizing: border-box;
   color: var(--m3-text);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .lvl-page__top {
@@ -161,8 +144,7 @@ function goBack() {
 
 .lvl-page__panel {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   padding: 1rem 0.7rem 0.85rem;
@@ -175,22 +157,10 @@ function goBack() {
   font-size: 1rem;
 }
 
-.lvl-page__slide--head {
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.lvl-page__grid-wrap + .lvl-page__grid-wrap {
+  margin-top: 0.85rem;
 }
 
-.lvl-page__swiper {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  padding: 0.4rem 0.25rem 0.6rem;
-}
-.lvl-page__slide {
-  height: auto;
-}
 .lvl-page__grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

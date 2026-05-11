@@ -1,6 +1,6 @@
 <template>
   <PhoneFrame :parallax="false">
-    <div class="prof">
+    <div class="prof" data-allow-browser-scroll>
       <header class="prof__top">
         <button
           type="button"
@@ -14,19 +14,11 @@
         <div class="prof__top-spacer" />
       </header>
 
-      <Swiper
-        class="prof__swiper"
-        :modules="swiperModules"
-        direction="vertical"
-        :slidesPerView="'auto'"
-        :freeMode="{ enabled: true, sticky: false }"
-        :mousewheel="{ forceToAxis: true, releaseOnEdges: true }"
-      >
-        <SwiperSlide class="prof__slide">
-          <section
-            class="prof__hero m3-modal-panel"
-            aria-label="Звёзды, уровни и монеты"
-          >
+      <div class="prof__sections">
+        <section
+          class="prof__hero m3-modal-panel"
+          aria-label="Звёзды, уровни и монеты"
+        >
             <div class="prof__hero-stars">
               <Icon class="prof__hero-star" icon="mdi:star" aria-hidden="true" />
               <span class="prof__hero-stars-num">{{ totalStars }}</span>
@@ -46,10 +38,8 @@
               />
             </div>
           </section>
-        </SwiperSlide>
 
-        <SwiperSlide class="prof__slide">
-          <section class="prof__panel m3-modal-panel" aria-labelledby="prof-lb-h">
+        <section class="prof__panel m3-modal-panel" aria-labelledby="prof-lb-h">
             <h2 id="prof-lb-h" class="prof__panel-title">Таблица лидеров</h2>
             <p class="prof__rank-line">
               Ваше место:
@@ -86,10 +76,8 @@
               подключить общий рейтинг.
             </p>
           </section>
-        </SwiperSlide>
 
-        <SwiperSlide class="prof__slide">
-          <section class="prof__panel m3-modal-panel" aria-labelledby="prof-ach-h">
+        <section class="prof__panel m3-modal-panel" aria-labelledby="prof-ach-h">
             <h2 id="prof-ach-h" class="prof__panel-title">Достижения</h2>
             <ul class="prof__ach-list">
               <li
@@ -122,8 +110,7 @@
               </li>
             </ul>
           </section>
-        </SwiperSlide>
-      </Swiper>
+      </div>
     </div>
   </PhoneFrame>
 </template>
@@ -136,8 +123,6 @@ import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import { Icon } from '@iconify/vue'
-import { Swiper, SwiperSlide } from 'swiper/vue'
-import { FreeMode, Mousewheel } from 'swiper'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
 import { useMatch3StatsStore } from '@/stores/match3Stats'
 import { useYandexGamesStore } from '@/stores/yandexGames'
@@ -167,8 +152,6 @@ const {
   specialsCreated,
   rainbowsUsed,
 } = storeToRefs(stats)
-
-const swiperModules = [FreeMode, Mousewheel]
 
 const playerLabel = ref('Вы')
 
@@ -232,7 +215,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   display: flex;
   flex-direction: column;
   color: var(--m3-text);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Шапка — как на экране настроек */
@@ -242,7 +227,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   align-items: center;
   gap: 0.35rem 0.45rem;
   padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
-  flex-shrink: 0;
 }
 
 .prof__back {
@@ -293,22 +277,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   width: 2.4rem;
 }
 
-.prof__swiper {
-  flex: 1;
-  min-height: 0;
+.prof__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
   width: 100%;
   padding: 0.75rem 0.7rem max(0.85rem, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
-}
-
-.prof__swiper :deep(.swiper-slide:not(:last-child)) {
-  margin-bottom: 0.65rem;
-}
-
-.prof__slide {
-  height: auto;
-  display: flex;
-  flex-direction: column;
 }
 
 .prof__hero {
@@ -437,8 +412,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 .prof__table-wrap {
   border-radius: 14px;
   border: 2px solid rgba(110, 57, 17, 0.28);
-  overflow: auto;
-  max-height: min(50vh, 22rem);
+  overflow: hidden;
   background: rgba(255, 252, 245, 0.5);
 }
 
@@ -463,9 +437,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   text-transform: uppercase;
   color: #6e3911;
   background: rgba(255, 230, 190, 0.35);
-  position: sticky;
-  top: 0;
-  z-index: 1;
 }
 
 .prof__lb-table td:last-child {

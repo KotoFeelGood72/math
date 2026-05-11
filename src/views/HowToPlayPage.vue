@@ -1,6 +1,6 @@
 <template>
   <PhoneFrame :parallax="false">
-    <div class="help">
+    <div class="help" data-allow-browser-scroll>
       <header class="help__top">
         <button
           type="button"
@@ -14,16 +14,8 @@
         <div class="help__top-spacer" />
       </header>
 
-      <Swiper
-        class="help__swiper"
-        :modules="swiperModules"
-        direction="vertical"
-        :slidesPerView="'auto'"
-        :freeMode="{ enabled: true, sticky: false }"
-        :mousewheel="{ forceToAxis: true, releaseOnEdges: true }"
-      >
-        <SwiperSlide class="help__slide">
-          <section class="help__panel m3-modal-panel" aria-labelledby="help-basics-h">
+      <div class="help__body">
+        <section class="help__panel m3-modal-panel" aria-labelledby="help-basics-h">
             <h2 id="help-basics-h" class="help__panel-title">Основы</h2>
             <p class="help__p">
               Выбирай фишку, затем соседнюю по горизонтали или вертикали — они
@@ -36,10 +28,8 @@
               даёт совпадений, отменится (фишки вернутся).
             </p>
           </section>
-        </SwiperSlide>
 
-        <SwiperSlide class="help__slide">
-          <section class="help__panel m3-modal-panel" aria-labelledby="help-goal-h">
+        <section class="help__panel m3-modal-panel" aria-labelledby="help-goal-h">
             <h2 id="help-goal-h" class="help__panel-title">Цель и ходы</h2>
             <p class="help__p">
               У каждого уровня ограниченное число <strong>ходов</strong>. За каждый
@@ -57,10 +47,8 @@
               ходы, если доступно).
             </p>
           </section>
-        </SwiperSlide>
 
-        <SwiperSlide class="help__slide">
-          <section class="help__panel m3-modal-panel" aria-labelledby="help-special-h">
+        <section class="help__panel m3-modal-panel" aria-labelledby="help-special-h">
             <h2 id="help-special-h" class="help__panel-title">Бустеры на поле</h2>
             <p class="help__p">
               Длинные совпадения создают особые фишки: ракеты по строке или столбцу,
@@ -72,10 +60,8 @@
               этого цвета с поля.
             </p>
           </section>
-        </SwiperSlide>
 
-        <SwiperSlide class="help__slide">
-          <section class="help__panel m3-modal-panel" aria-labelledby="help-toolbar-h">
+        <section class="help__panel m3-modal-panel" aria-labelledby="help-toolbar-h">
             <h2 id="help-toolbar-h" class="help__panel-title">Панель бустеров</h2>
             <ul class="help__list">
               <li>
@@ -97,18 +83,15 @@
               </li>
             </ul>
           </section>
-        </SwiperSlide>
 
-        <SwiperSlide class="help__slide">
-          <section class="help__panel m3-modal-panel" aria-labelledby="help-progress-h">
+        <section class="help__panel m3-modal-panel" aria-labelledby="help-progress-h">
             <h2 id="help-progress-h" class="help__panel-title">Прогресс</h2>
             <p class="help__p">
               За прохождение уровней получаешь <strong>звёзды</strong> и
               <strong>монеты</strong>. Новые уровни открываются по очереди. Удачи!
             </p>
           </section>
-        </SwiperSlide>
-      </Swiper>
+      </div>
 
       <footer class="help__bottom-bar">
         <MenuActionButton variant="hero" class="help__bottom-back" @click="goBack">
@@ -127,11 +110,7 @@ import { useRouter } from 'vue-router'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import MenuActionButton from '@/components/MenuActionButton.vue'
 import { Icon } from '@iconify/vue'
-import { Swiper, SwiperSlide } from 'swiper/vue'
-import { FreeMode, Mousewheel } from 'swiper'
-
 const router = useRouter()
-const swiperModules = [FreeMode, Mousewheel]
 
 function goBack() {
   router.push({ name: 'menu' })
@@ -153,6 +132,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   flex-direction: column;
   min-height: 0;
   color: var(--m3-text);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .help__top {
@@ -161,7 +143,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   align-items: center;
   gap: 0.35rem 0.45rem;
   padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
-  flex-shrink: 0;
 }
 
 .help__back {
@@ -212,22 +193,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   width: 2.4rem;
 }
 
-.help__swiper {
-  flex: 1;
-  min-height: 0;
+.help__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
   width: 100%;
   padding: 0.75rem 0.7rem 0.6rem;
   box-sizing: border-box;
-}
-
-.help__swiper :deep(.swiper-slide:not(:last-child)) {
-  margin-bottom: 0.65rem;
-}
-
-.help__slide {
-  height: auto;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
 }
 
 .help__panel {
@@ -287,8 +260,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .help__bottom-bar {
-  flex-shrink: 0;
   padding: 0.55rem 0.7rem max(0.65rem, env(safe-area-inset-bottom, 0px));
+  flex: 0 0 auto;
   background: linear-gradient(180deg, #b9e3fa 0%, #6ec4ea 100%);
   border-top: 2px solid rgba(110, 57, 17, 0.2);
 }

@@ -1,6 +1,6 @@
 <template>
   <PhoneFrame :parallax="false">
-    <div class="menu">
+    <div class="menu" data-allow-browser-scroll>
       <header class="menu__topbar">
         <button type="button" class="menu__cog" aria-label="Настройки" @click="goSettings">
           <Icon icon="mdi:cog" />
@@ -104,10 +104,15 @@ function goSettings() {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 0 0.85rem 1rem;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  padding: 0 0.85rem max(1rem, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
   color: var(--m3-text);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .menu__topbar {
@@ -171,8 +176,6 @@ function goSettings() {
 .menu__cards {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   gap: 0.85rem;
-  /* margin-top: auto; */
 }
 </style>

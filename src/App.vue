@@ -1,13 +1,16 @@
 <template>
   <div ref="appRootEl" class="app-root">
+    <div class="app-root__view">
+      <router-view :key="route.fullPath" />
+    </div>
     <div
-      v-if="!bootReady"
+      v-if="showBootProgressUi"
       class="app-boot"
       role="status"
       aria-live="polite"
       aria-busy="true"
     >
-      <div class="app-boot__bg" aria-hidden="true" :style="bootLoaderBgStyle" />
+      <div class="app-boot__blocker" aria-hidden="true" />
       <div class="app-boot__bottom">
         <div class="app-boot__bar-wrap">
           <div class="app-boot__bar-track">
@@ -21,11 +24,6 @@
         <p class="app-boot__tip">{{ currentBootTip }}</p>
       </div>
     </div>
-    <template v-else>
-      <div class="app-root__view">
-        <router-view :key="route.fullPath" />
-      </div>
-    </template>
   </div>
 </template>
 
@@ -127,9 +125,17 @@ function stopBootProgressLoop() {
 bootProgressRaf = requestAnimationFrame(tickBootProgress)
 startBootTipRotation()
 let progressSaveTimer = 0
-const SAVE_DEBOUNCE_MS = 3500
+/** Дебаунс перед player.setData (лимит SDK: 100 / 5 мин). */
+const SAVE_DEBOUNCE_MS = 1200
+
+/** Локальный дубль облака — если getData пустой (офлайн / первый кадр). */
+const LOCAL_PROGRESS_BACKUP_KEY = 'match3_yandex_backup_v1'
 
 const route = useRoute()
+/** Полоса загрузки только на стартовом экране (главное меню), не поверх уровня. */
+const showBootProgressUi = computed(
+  () => !bootReady.value && route.name === 'menu',
+)
 const yandexGames = useYandexGamesStore()
 const flow = useGameFlowStore()
 const progress = useMatch3ProgressStore()
@@ -138,12 +144,6 @@ const game = useMatch3GameStore()
 const audioSettings = useAudioSettingsStore()
 
 const { lastSavedSnapshotKey } = storeToRefs(flow)
-
-const publicAssetBase = import.meta.env.BASE_URL
-const bootLoaderBgStyle = computed(() => ({
-  '--boot-bg-mobile': `url('${publicAssetBase}mobile-loader.png')`,
-  '--boot-bg-pc': `url('${publicAssetBase}pc-loader.png')`,
-}))
 
 watch(
   () => 'Match-3',
@@ -254,6 +254,25 @@ function buildCloudSnapshot() {
   }
 }
 
+function readLocalProgressBackup() {
+  try {
+    const raw = localStorage.getItem(LOCAL_PROGRESS_BACKUP_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw)
+    return o && typeof o === 'object' ? o : null
+  } catch {
+    return null
+  }
+}
+
+function writeLocalProgressBackup(snap) {
+  try {
+    localStorage.setItem(LOCAL_PROGRESS_BACKUP_KEY, JSON.stringify(snap))
+  } catch {
+    /* квота / приватный режим */
+  }
+}
+
 function applyCloudSnapshot(snap) {
   if (!snap || typeof snap !== 'object') return
   if (snap.progress) progress.restoreSnapshot(snap.progress)
@@ -266,19 +285,33 @@ void startBackgroundMusicIfNeeded()
 void (async () => {
   try {
     await yandexGames.initSdk()
-    const saved = await yandexGames.loadProgress()
-    if (saved) {
+    await yandexGames.ensurePlayer()
+    let saved = await yandexGames.loadProgress()
+    if (!saved) {
+      saved = readLocalProgressBackup()
+      if (saved) applyCloudSnapshot(saved)
+    } else {
       applyCloudSnapshot(saved)
-      const snap = buildCloudSnapshot()
-      const k = getSnapshotKey(snap)
-      if (k) lastSavedSnapshotKey.value = k
     }
+    const snap = buildCloudSnapshot()
+    const k = getSnapshotKey(snap)
+    if (k) lastSavedSnapshotKey.value = k
     await nextTick()
     yandexGames.applyPlayerLocaleFromYsdk()
     await yandexGames.notifyLoadingReady()
   } catch (e) {
     if (typeof console !== 'undefined' && typeof console.error === 'function') {
       console.error('[Match3][App] bootstrap', e)
+    }
+    try {
+      const b = readLocalProgressBackup()
+      if (b) {
+        applyCloudSnapshot(b)
+        const k = getSnapshotKey(buildCloudSnapshot())
+        if (k) lastSavedSnapshotKey.value = k
+      }
+    } catch {
+      /* ignore */
     }
   } finally {
     bootBootstrapDone.value = true
@@ -322,7 +355,7 @@ onBeforeUnmount(() => {
   stopBootTipRotation()
   detachAppRootUiGuards()
   detachViewportTouchGuards()
-  void flushProgressToCloud(true)
+  void flushProgressToCloud()
   window.removeEventListener('pagehide', flushOnLifecycle)
   document.removeEventListener('visibilitychange', onPageLifecycleSave)
   detachBgmVisibility()
@@ -341,7 +374,10 @@ async function flushProgressToCloud() {
     const snapshotKey = getSnapshotKey(snapshot)
     if (snapshotKey && snapshotKey === lastSavedSnapshotKey.value) return
     const saved = await yandexGames.saveProgress(snapshot)
-    if (saved && snapshotKey) lastSavedSnapshotKey.value = snapshotKey
+    if (saved && snapshotKey) {
+      lastSavedSnapshotKey.value = snapshotKey
+      writeLocalProgressBackup(snapshot)
+    }
   } catch (e) {
     if (typeof console !== 'undefined' && typeof console.warn === 'function') {
       console.warn('[Match3] cloud save skipped', e)
@@ -360,14 +396,20 @@ function scheduleProgressSave() {
   }, SAVE_DEBOUNCE_MS)
 }
 
+const cloudSaveFingerprint = computed(() =>
+  getSnapshotKey(buildCloudSnapshot()),
+)
+
+watch(cloudSaveFingerprint, () => {
+  if (!bootBootstrapDone.value) return
+  scheduleProgressSave()
+})
+
 watch(
-  [
-    () => progress.completedCount,
-    () => progress.totalStars,
-    () => stats.totalMoves,
-    () => stats.totalScore,
-  ],
-  () => scheduleProgressSave(),
+  () => route.fullPath,
+  () => {
+    void flushProgressToCloud()
+  },
 )
 
 watch(
@@ -1044,26 +1086,18 @@ body {
   pointer-events: none;
 }
 
-.app-boot__bg {
+.app-boot__blocker {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-color: #4ea6e0;
-  background-image: var(--boot-bg-mobile);
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-}
-
-@media (min-width: 900px) {
-  .app-boot__bg {
-    background-image: var(--boot-bg-pc);
-  }
+  pointer-events: auto;
+  background: transparent;
 }
 
 .app-boot__bottom {
   position: relative;
   z-index: 1;
+  pointer-events: auto;
   width: 100%;
   max-width: min(26rem, 100%);
   margin-left: auto;

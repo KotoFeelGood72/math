@@ -255,17 +255,26 @@ export const useYandexGamesStore = defineStore('yandexGames', {
       if (!player || typeof player.setData !== 'function') {
         return false
       }
+      const plain = JSON.parse(JSON.stringify(progress))
+      const payload = { [PROGRESS_DATA_KEY]: plain }
       try {
-        // Срезаем Proxy/нерелевантное; SDK ожидает JSON-совместимый объект (лимит 200 КБ).
-        const plain = JSON.parse(JSON.stringify(progress))
-        await player.setData({ [PROGRESS_DATA_KEY]: plain }, true)
+        await player.setData(payload, true)
         return true
       } catch (err) {
         if (isCloudDataUnchangedError(err)) {
           return true
         }
-        this.storageError = err instanceof Error ? err : new Error(String(err))
-        return false
+        try {
+          await new Promise((r) => setTimeout(r, 450))
+          await player.setData(payload, true)
+          return true
+        } catch (err2) {
+          if (isCloudDataUnchangedError(err2)) {
+            return true
+          }
+          this.storageError = err2 instanceof Error ? err2 : new Error(String(err2))
+          return false
+        }
       }
     },
     async clearProgress() {

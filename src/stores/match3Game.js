@@ -304,9 +304,12 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     // Шаг 1 — раскрыть бустеры внутри стартового набора
     const expandedOnce = expandSpecials(board.value, initialClearSet)
     clearFx.value = inferClearFx(board.value, expandedOnce)
-    matchedKeys.value = new Set(initialClearSet)
+    matchedKeys.value = new Set(expandedOnce)
     await wait(MATCH_FLASH_MS)
     const expanded = expandedOnce
+    // Снять подсветку до смены доски: иначе новые фишки наследуют «matching» и
+    // остаются с opacity:0 после завершения m3-pulse (280ms).
+    matchedKeys.value = new Set()
     await applyClearedAndRefill(expanded, cfg, /* triggerPos */ null, /* createSpecials */ [])
     matchedKeys.value = new Set()
     clearFx.value = null
@@ -337,6 +340,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       matchedKeys.value = new Set(expanded)
 
       await wait(MATCH_FLASH_MS)
+      matchedKeys.value = new Set()
 
       // 2) определить, какие бустеры создаются по форме матчей
       const specialsToCreate = decideSpecialsFromMatches(
@@ -510,6 +514,9 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       const progress = useMatch3ProgressStore()
       progress.recordResult(cfg.id, stars.value, score.value)
       progress.addCoins(coinsEarned.value)
+      if (cfg.id === 1) {
+        progress.markTutorialDone()
+      }
       return
     }
     if (movesLeft.value <= 0) {
