@@ -78,17 +78,37 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     return Math.max(0, Math.min(999, n | 0))
   }
 
-  function addStoredBooster(kind, n) {
-    const d = n | 0
-    if (d <= 0) return
+  /** Целое ≥0 из сохранения / UI (избегаем строковой конкатенации при `cur.bomb + n`). */
+  function boosterInt(v) {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, Math.trunc(n))
+  }
+
+  /**
+   * Атомарно прибавить к запасу по каждому типу (одна запись в state).
+   * @param {{ bomb?: number, clock?: number, star?: number }} delta
+   */
+  function addStoredBoostersDelta(delta) {
+    if (!delta || typeof delta !== 'object') return
+    const db = boosterInt(delta.bomb)
+    const dc = boosterInt(delta.clock)
+    const ds = boosterInt(delta.star)
+    if (db <= 0 && dc <= 0 && ds <= 0) return
     const cur = storedBoosters.value
-    if (kind === 'bomb') {
-      storedBoosters.value = { ...cur, bomb: clampBoosterCount(cur.bomb + d) }
-    } else if (kind === 'clock') {
-      storedBoosters.value = { ...cur, clock: clampBoosterCount(cur.clock + d) }
-    } else if (kind === 'star') {
-      storedBoosters.value = { ...cur, star: clampBoosterCount(cur.star + d) }
+    storedBoosters.value = {
+      bomb: clampBoosterCount(boosterInt(cur.bomb) + db),
+      clock: clampBoosterCount(boosterInt(cur.clock) + dc),
+      star: clampBoosterCount(boosterInt(cur.star) + ds),
     }
+  }
+
+  function addStoredBooster(kind, n) {
+    const d = boosterInt(n)
+    if (d <= 0) return
+    if (kind === 'bomb') addStoredBoostersDelta({ bomb: d })
+    else if (kind === 'clock') addStoredBoostersDelta({ clock: d })
+    else if (kind === 'star') addStoredBoostersDelta({ star: d })
   }
 
   /**
@@ -97,13 +117,16 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
    */
   function pullBoostersForLevel() {
     const cur = storedBoosters.value
-    const bomb = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, cur.bomb | 0)
-    const clock = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, cur.clock | 0)
-    const star = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, cur.star | 0)
+    const curBomb = boosterInt(cur.bomb)
+    const curClock = boosterInt(cur.clock)
+    const curStar = boosterInt(cur.star)
+    const bomb = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, curBomb)
+    const clock = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, curClock)
+    const star = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, curStar)
     storedBoosters.value = {
-      bomb: clampBoosterCount(cur.bomb - bomb),
-      clock: clampBoosterCount(cur.clock - clock),
-      star: clampBoosterCount(cur.star - star),
+      bomb: clampBoosterCount(curBomb - bomb),
+      clock: clampBoosterCount(curClock - clock),
+      star: clampBoosterCount(curStar - star),
     }
     return { bomb, clock, star }
   }
@@ -130,7 +153,11 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
       levels: JSON.parse(JSON.stringify(levels.value)),
       coins: coins.value,
       tutorialDone: tutorialDone.value,
-      storedBoosters: { ...storedBoosters.value },
+      storedBoosters: {
+        bomb: boosterInt(storedBoosters.value.bomb),
+        clock: boosterInt(storedBoosters.value.clock),
+        star: boosterInt(storedBoosters.value.star),
+      },
       claimedFreePlayBoosterTriplet: claimedFreePlayBoosterTriplet.value,
     }
   }
@@ -157,9 +184,9 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     if (snap.storedBoosters && typeof snap.storedBoosters === 'object') {
       const sb = snap.storedBoosters
       storedBoosters.value = {
-        bomb: clampBoosterCount(sb.bomb | 0),
-        clock: clampBoosterCount(sb.clock | 0),
-        star: clampBoosterCount(sb.star | 0),
+        bomb: clampBoosterCount(boosterInt(sb.bomb)),
+        clock: clampBoosterCount(boosterInt(sb.clock)),
+        star: clampBoosterCount(boosterInt(sb.star)),
       }
     }
     const hadTutorialFlag = typeof snap.tutorialDone === 'boolean'
@@ -214,6 +241,7 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     recordResult,
     addCoins,
     addStoredBooster,
+    addStoredBoostersDelta,
     pullBoostersForLevel,
     takePlayBoosterBasePerKind,
     trySpendCoins,

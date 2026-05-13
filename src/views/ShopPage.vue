@@ -215,9 +215,7 @@ function buy(cell) {
   if (offer.type === 'single') {
     progress.addStoredBooster(offer.kind, offer.qty)
   } else {
-    progress.addStoredBooster('bomb', offer.bundle.bomb)
-    progress.addStoredBooster('clock', offer.bundle.clock)
-    progress.addStoredBooster('star', offer.bundle.star)
+    progress.addStoredBoostersDelta(offer.bundle)
   }
   detailOffer.value = null
   purchaseSuccessTitle.value = offer.title
