@@ -115,6 +115,15 @@
               :style="{ width: `${progressPercent}%` }"
             />
           </div>
+          <button
+            type="button"
+            class="settings__danger-btn"
+            :disabled="resetInProgress"
+            @click="openResetConfirm"
+          >
+            <Icon icon="mdi:restart-alert" class="settings__danger-btn-ico" />
+            Начать игру сначала
+          </button>
         </section>
 
         <section
@@ -170,6 +179,46 @@
           Назад
         </MenuActionButton>
       </footer>
+
+      <div
+        v-if="resetConfirmOpen"
+        class="m3-modal-overlay settings__reset-scrim"
+        role="presentation"
+        @click.self="closeResetConfirm"
+      >
+        <div
+          class="m3-modal-panel settings__reset-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settings-reset-title"
+        >
+          <h3 id="settings-reset-title" class="settings__reset-title">
+            Начать игру сначала?
+          </h3>
+          <p class="settings__reset-text">
+            Будет удалён весь прогресс: уровни, монеты, бустеры и статистика —
+            в том числе в облаке Яндекс.Игр. Это действие нельзя отменить.
+          </p>
+          <div class="m3-modal-actions settings__reset-actions">
+            <button
+              type="button"
+              class="settings__reset-btn settings__reset-btn--cancel"
+              :disabled="resetInProgress"
+              @click="closeResetConfirm"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              class="settings__reset-btn settings__reset-btn--confirm"
+              :disabled="resetInProgress"
+              @click="confirmReset"
+            >
+              {{ resetInProgress ? 'Очищаем…' : 'Начать сначала' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </PhoneFrame>
 </template>
@@ -177,7 +226,7 @@
 <script setup>
 defineOptions({ name: 'SettingsPage' })
 
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import PhoneFrame from '@/components/PhoneFrame.vue'
@@ -188,13 +237,67 @@ import {
   useAudioSettingsStoreRefs,
 } from '@/stores/audioSettings'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
+import { useMatch3StatsStore } from '@/stores/match3Stats'
+import { useMatch3GameStore } from '@/stores/match3Game'
+import { useYandexGamesStore } from '@/stores/yandexGames'
+import { clearLocalProgressBackup } from '@/state/localProgressBackup'
 
 const router = useRouter()
 const audio = useAudioSettingsStore()
 const { volume, muted, musicEnabled, sfxEnabled } =
   useAudioSettingsStoreRefs()
 const progress = useMatch3ProgressStore()
+const stats = useMatch3StatsStore()
+const game = useMatch3GameStore()
+const yandexGames = useYandexGamesStore()
 const { completedCount, totalLevels, progressPercent } = storeToRefs(progress)
+
+const resetConfirmOpen = ref(false)
+const resetInProgress = ref(false)
+
+function openResetConfirm() {
+  if (resetInProgress.value) return
+  resetConfirmOpen.value = true
+}
+function closeResetConfirm() {
+  if (resetInProgress.value) return
+  resetConfirmOpen.value = false
+}
+
+/**
+ * Полный сброс игрока: локальные сторы, локальный бэкап, облако Я.Игр.
+ * Звуковые настройки и сам прогресс туториала по обучению (driver.js) не
+ * трогаем — это про предпочтения пользователя, а не про игровой прогресс.
+ *
+ * После очистки делаем `location.reload()` — пере-инициализация запускает
+ * bootstrap App.vue заново, который при чистом state снова начислит
+ * стартовый бонус +3 каждого бустера (см. `grantInitialFreeBoosters`).
+ */
+async function confirmReset() {
+  if (resetInProgress.value) return
+  resetInProgress.value = true
+  try {
+    /* Локальные сторы. */
+    game.quit()
+    progress.reset()
+    stats.reset()
+    /* localStorage-бэкап (он же был бы прочитан раньше облака при reload). */
+    clearLocalProgressBackup()
+    /* Облако Я.Игр: progress и stats параллельно, но переживаем ошибки
+       (например, оффлайн в dev-shim) — главное чтобы локально точно очистилось. */
+    const zeroStats = Object.fromEntries(
+      Object.keys(stats.getSnapshot()).map((k) => [k, 0]),
+    )
+    await Promise.allSettled([
+      yandexGames.clearProgress(),
+      yandexGames.saveStats(zeroStats),
+    ])
+  } finally {
+    /* Reload — самый надёжный путь к чистой инициализации всех сторов,
+       audio-focus, watchers и стартового бонуса. */
+    if (typeof window !== 'undefined') window.location.reload()
+  }
+}
 
 const volumeAriaText = computed(() => {
   const pct = Math.round((muted.value ? 0 : volume.value) * 100)
@@ -600,5 +703,115 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 .settings__bottom-back {
   width: 100%;
   max-width: none;
+}
+
+/* Деструктивная кнопка «Начать игру сначала» в панели «Прогресс» */
+.settings__danger-btn {
+  margin-top: 0.5rem;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(120, 18, 18, 0.6);
+  background: linear-gradient(180deg, #e96a6a 0%, #b83838 100%);
+  border: 3px solid #7a1818;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -2px 0 rgba(120, 18, 18, 0.45),
+    0 3px 0 rgba(120, 18, 18, 0.55);
+}
+.settings__danger-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -2px 0 rgba(120, 18, 18, 0.45),
+    0 1px 0 rgba(120, 18, 18, 0.55);
+}
+.settings__danger-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.settings__danger-btn-ico :deep(svg),
+.settings__danger-btn-ico {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+/* Модалка подтверждения сброса */
+.settings__reset-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+}
+.settings__reset-dialog {
+  width: min(20rem, calc(100% - 1.4rem));
+  padding: 1rem 1rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  align-items: stretch;
+  text-align: center;
+}
+.settings__reset-title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 900;
+  color: #6e1818;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.settings__reset-text {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: #4a2810;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.settings__reset-actions {
+  display: flex;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+.settings__reset-btn {
+  flex: 1;
+  padding: 0.55rem 0.6rem;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  border-radius: 12px;
+  cursor: pointer;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.4),
+    0 3px 0 rgba(0, 0, 0, 0.18);
+}
+.settings__reset-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.3),
+    0 1px 0 rgba(0, 0, 0, 0.18);
+}
+.settings__reset-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.settings__reset-btn--cancel {
+  color: #4a2810;
+  background: linear-gradient(180deg, #f3e1bf 0%, #d6b885 100%);
+  border: 3px solid #7a4a1a;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.settings__reset-btn--confirm {
+  color: #fff;
+  background: linear-gradient(180deg, #e96a6a 0%, #b83838 100%);
+  border: 3px solid #7a1818;
 }
 </style>

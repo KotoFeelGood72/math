@@ -83,6 +83,10 @@ import {
   stopAudioFocus,
 } from '@/audio/audioFocus.js'
 import bgmUrl from '@/assets/music.mp3'
+import {
+  readLocalProgressBackup,
+  writeLocalProgressBackup as writeLocalProgressBackupRaw,
+} from '@/state/localProgressBackup'
 
 const bootLoaderPcUrl = `${import.meta.env.BASE_URL}pc-loader.png`
 const bootLoaderMobileUrl = `${import.meta.env.BASE_URL}mobile-loader.png`
@@ -165,9 +169,6 @@ let statsSaveTimer = 0
 const SAVE_DEBOUNCE_MS = 1200
 /** Дебаунс перед player.setStats (отдельные лимиты, но без агрессии). */
 const STATS_SAVE_DEBOUNCE_MS = 1500
-
-/** Локальный дубль облака — если getData пустой (офлайн / первый кадр). */
-const LOCAL_PROGRESS_BACKUP_KEY = 'match3_yandex_backup_v1'
 
 const route = useRoute()
 /**
@@ -268,28 +269,16 @@ function buildStatsSnapshot() {
   return stats.getSnapshot()
 }
 
-function readLocalProgressBackup() {
-  try {
-    const raw = localStorage.getItem(LOCAL_PROGRESS_BACKUP_KEY)
-    if (!raw) return null
-    const o = JSON.parse(raw)
-    return o && typeof o === 'object' ? o : null
-  } catch {
-    return null
-  }
-}
-
+/**
+ * Локальная обёртка над общим модулем — нужна, чтобы не дублировать в каждом
+ * месте формирование снимка из сторов. Сам ключ и формат — в
+ * `state/localProgressBackup.js` (там же расширенное описание).
+ */
 function writeLocalProgressBackup() {
-  try {
-    const snap = {
-      progress: progress.getSnapshot(),
-      stats: stats.getSnapshot(),
-      savedAt: Date.now(),
-    }
-    localStorage.setItem(LOCAL_PROGRESS_BACKUP_KEY, JSON.stringify(snap))
-  } catch {
-    /* квота / приватный режим */
-  }
+  writeLocalProgressBackupRaw({
+    progress: progress.getSnapshot(),
+    stats: stats.getSnapshot(),
+  })
 }
 
 /**
@@ -372,6 +361,14 @@ void (async () => {
       /* ignore */
     }
   } finally {
+    /* Однократный стартовый бонус начисляем в `finally`, чтобы новый игрок
+       получил +3 каждого бустера даже если SDK/облако недоступны. Делаем
+       после фиксации lastSavedSnapshotKey, и руками флашим — watch'ер на
+       fingerprint пока молчит (bootBootstrapDone ещё false). */
+    if (progress.grantInitialFreeBoosters()) {
+      writeLocalProgressBackup()
+      scheduleProgressSave()
+    }
     bootBootstrapDone.value = true
   }
 })()

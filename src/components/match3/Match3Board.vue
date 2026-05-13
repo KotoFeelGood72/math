@@ -34,6 +34,7 @@
               :selected="!!selected && selected.r === r && selected.c === c"
               :matching="matchedKeys?.has(`${r},${c}`) || false"
               :spawning="spawnedKeys?.has(`${r},${c}`) || false"
+              :fall-rows="fallDeltas?.get(`${r},${c}`) || 0"
               :drag-offset="getDragOffset(r, c)"
               :hint-shake="hintCellKey !== '' && hintCellKey === `${r},${c}`"
               :tutorial-highlight="
@@ -76,6 +77,12 @@ const props = defineProps({
   /** Эффект очистки: молнии / лучи ракет */
   clearFx: { type: Object, default: null },
   spawnedKeys: { type: Set, default: () => new Set() },
+  /**
+   * Map<"r,c", rowsFallen> — на сколько строк проехала вниз каждая клетка
+   * в текущем каскаде (см. store match3Game). Используется для естественной
+   * анимации падения «всей колонки целиком», без наезжаний.
+   */
+  fallDeltas: { type: Map, default: () => new Map() },
   disabled: { type: Boolean, default: false },
   /** "r,c" ячейки для подсказки (покачивание после бездействия). */
   hintCellKey: { type: String, default: '' },

@@ -38,7 +38,13 @@ import { useMatch3StatsStore } from '@/stores/match3Stats.js'
 
 const SWAP_INVALID_MS = 160
 const MATCH_FLASH_MS = 280
-const SPAWN_MS = 320
+/** Время падения одной строки (мс): должно совпадать с `m3-fall` в Match3Cell.
+ *  Общая длительность падения = `fallRows * SPAWN_MS_PER_ROW`, как в обычной
+ *  гравитации с постоянной скоростью — высокие колонки падают дольше. */
+const SPAWN_MS_PER_ROW = 130
+/** Длительность анимации «pop» для бустеров, появляющихся на месте матча
+ *  (не падают сверху). Должна совпадать с `m3-pop` в Match3Cell. */
+const SPAWN_POP_MS = 260
 /** Если стек отката пуст — бустер «время» даёт доп. ходы вместо отмены хода. */
 const CLOCK_EXTRA_MOVES_WHEN_NO_UNDO = 3
 /** Перемешивание при «нет ходов» за монеты (см. модалку на экране игры). */
@@ -67,7 +73,21 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
   const matchedKeys = ref(new Set())
   /** Визуальный эффект очередной волны очистки (молнии / лучи). */
   const clearFx = ref(null)
+  /**
+   * Клетки, для которых играется анимация «pop» (бустер появился на месте после
+   * матча). Падающие фишки сюда НЕ кладём — для них есть отдельная карта
+   * `fallDeltas` ниже.
+   */
   const spawnedKeys = ref(new Set())
+  /**
+   * Карта «сколько строк проехала вниз каждая клетка» в текущем каскаде.
+   * Включает и существующие фишки, которые сдвинулись от гравитации, и новые,
+   * которые «выехали» сверху доски. Длительность анимации пропорциональна
+   * этому значению — колонки с глубокими дырами падают дольше, как в
+   * классических Match-3. Ключ — `"r,c"`, значение — целое число строк.
+   * @type {import('vue').Ref<Map<string, number>>}
+   */
+  const fallDeltas = ref(new Map())
   const lastUserSwap = ref(null)
   /** Бесплатное перемешивание при «нет ходов» — не более одного за уровень. */
   const noMovesFreeShuffleUsed = ref(false)
@@ -161,20 +181,32 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     lastUserSwap.value = null
     noMovesFreeShuffleUsed.value = false
     useMatch3StatsStore().noteLevelStarted()
     undoStack.value = []
     const progress = useMatch3ProgressStore()
-    /* В туториале запас не используется и базовые 3 гарантированы. */
-    const extra = useTutorial
-      ? { bomb: 0, clock: 0, star: 0 }
-      : progress.pullBoostersForLevel()
-    const basePerKind = useTutorial ? 3 : progress.takePlayBoosterBasePerKind()
-    storedBoostersInLevel.value = { bomb: extra.bomb, clock: extra.clock, star: extra.star }
-    boosterBomb.value = basePerKind + extra.bomb
-    boosterClock.value = basePerKind + extra.clock
-    boosterStar.value = basePerKind + extra.star
+    if (useTutorial) {
+      /* В туториале бустеры выдаются «фиксированно» в самой партии для
+         обучения и не идут в персистентный запас. storedBoostersInLevel=0 —
+         расход не списывается из `storedBoosters`. */
+      storedBoostersInLevel.value = { bomb: 0, clock: 0, star: 0 }
+      boosterBomb.value = 3
+      boosterClock.value = 3
+      boosterStar.value = 3
+    } else {
+      /* На обычных уровнях вся «база» хранится в персистентном `storedBoosters`
+         (стартовый бонус +3 каждого типа начисляется один раз при старте
+         приложения — см. `grantInitialFreeBoosters`). Активные счётчики
+         партии равны запасу, и каждая трата синхронно списывается из запаса
+         через `chargeBoosterFromStored`. */
+      const extra = progress.pullBoostersForLevel()
+      storedBoostersInLevel.value = { bomb: extra.bomb, clock: extra.clock, star: extra.star }
+      boosterBomb.value = extra.bomb
+      boosterClock.value = extra.clock
+      boosterStar.value = extra.star
+    }
   }
 
   /**
@@ -234,6 +266,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     selected.value = null
   }
 
@@ -457,6 +490,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     return true
   }
 
@@ -470,6 +504,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     return true
   }
 
@@ -484,6 +519,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     return true
   }
 
@@ -538,26 +574,48 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       collected.value += got
     }
 
-    // Гравитация + доспавн
+    // Гравитация + доспавн.
     const beforeGrav = nextBoard
-    const gravBoard = applyGravity(beforeGrav)
-    const refilled = refill(gravBoard, cfg.colors, rng)
-    const spawnSet = new Set()
-    for (let r = 0; r < refilled.length; r += 1) {
-      for (let c = 0; c < refilled[0].length; c += 1) {
-        if (beforeGrav[r][c] === EMPTY && refilled[r][c] !== EMPTY) {
-          spawnSet.add(`${r},${c}`)
+    const { board: gravBoard, fromRow } = applyGravity(beforeGrav)
+    const { board: refilled, newFromRow } = refill(gravBoard, cfg.colors, rng)
+    /* Считаем `fallDeltas` для КАЖДОЙ движущейся клетки (и съехавшей старой,
+       и новой сверху), чтобы вся колонка анимировалась как единая «лента»:
+       нижние фишки приземляются раньше, верхние позже — но движутся с одной
+       скоростью, поэтому не наезжают друг на друга. */
+    const rowsCount = refilled.length
+    const colsCount = refilled[0].length
+    const newFallDeltas = new Map()
+    let maxFall = 0
+    for (let r = 0; r < rowsCount; r += 1) {
+      for (let c = 0; c < colsCount; c += 1) {
+        const v = refilled[r][c]
+        if (v === EMPTY || v === BLOCKED) continue
+        const origin = fromRow[r][c] >= 0 ? fromRow[r][c] : newFromRow[r][c]
+        const delta = r - origin
+        if (delta > 0) {
+          newFallDeltas.set(`${r},${c}`, delta)
+          if (delta > maxFall) maxFall = delta
         }
       }
     }
-    // Помечаем созданные бустеры тоже как «появившиеся», чтобы анимация привлекла внимание
+    /* Бустеры, созданные в результате матча, появляются на МЕСТЕ удалённого
+       (никуда не падают) — для них отдельная «pop»-анимация через `spawnedKeys`. */
+    const spawnSet = new Set()
     for (const sp of specialsToCreate) {
-      spawnSet.add(`${sp.pos.r},${sp.pos.c}`)
+      const key = `${sp.pos.r},${sp.pos.c}`
+      spawnSet.add(key)
+      /* На бустере не должно одновременно играть и fall, и pop. */
+      newFallDeltas.delete(key)
     }
     board.value = refilled
     spawnedKeys.value = spawnSet
-    await wait(SPAWN_MS)
+    fallDeltas.value = newFallDeltas
+    /* Длительность ожидания = время падения самой высокой фишки. Линейно
+       по числу строк (как в реальной гравитации с постоянной скоростью). */
+    const totalMs = maxFall > 0 ? SPAWN_MS_PER_ROW * maxFall : SPAWN_POP_MS
+    await wait(totalMs)
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     // triggerPos больше не используется — оставлено для совместимости
     void triggerPos
   }
@@ -763,6 +821,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     return true
   }
 
@@ -782,6 +841,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
+    fallDeltas.value = new Map()
     undoStack.value = []
     storedBoostersInLevel.value = { bomb: 0, clock: 0, star: 0 }
   }
@@ -803,6 +863,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     matchedKeys,
     clearFx,
     spawnedKeys,
+    fallDeltas,
     lastUserSwap,
     noMovesFreeShuffleUsed,
     boosterBomb,

@@ -22,7 +22,8 @@
       :class="{
         'm3cell__anim--empty': value < 0,
         'm3cell__anim--matching': matching,
-        'm3cell__anim--spawning': spawning && value >= 0,
+        'm3cell__anim--falling': fallRows > 0 && value >= 0,
+        'm3cell__anim--popping': spawning && value >= 0 && fallRows === 0,
       }"
       :style="cellStyle"
     >
@@ -80,6 +81,13 @@ const props = defineProps({
   selected: { type: Boolean, default: false },
   matching: { type: Boolean, default: false },
   spawning: { type: Boolean, default: false },
+  /**
+   * Сколько строк проехала эта клетка в текущем каскаде. 0 — клетка
+   * не падает, остаётся на месте. Используется для анимации «вся колонка
+   * как лента» — длительность и стартовое смещение пропорциональны числу
+   * пройденных строк, поэтому фишки физически не наезжают друг на друга.
+   */
+  fallRows: { type: Number, default: 0 },
   dragOffset: { type: Object, default: null },
   /** Подсказка: циклически покачивать картинку фишки. */
   hintShake: { type: Boolean, default: false },
@@ -98,9 +106,19 @@ const color = computed(() => {
   return COLOR_PALETTE[i]
 })
 
-const cellStyle = computed(() => ({
-  '--cell-color': color.value?.cssVar || '#ffffff',
-}))
+/** Должно совпадать с `SPAWN_MS_PER_ROW` в `match3Game.js`. */
+const FALL_MS_PER_ROW = 130
+
+const cellStyle = computed(() => {
+  const rows = Math.max(0, props.fallRows | 0)
+  /* Длительность и амплитуда падения линейно растут с числом пройденных
+     строк — все фишки движутся с одной скоростью, как под гравитацией. */
+  return {
+    '--cell-color': color.value?.cssVar || '#ffffff',
+    '--fall-rows': rows,
+    '--fall-duration': `${rows * FALL_MS_PER_ROW}ms`,
+  }
+})
 
 const iconSrc = computed(() => {
   if (props.value < 0) return null
@@ -345,24 +363,41 @@ const ariaLabel = computed(() => {
   }
 }
 
-.m3cell__anim--spawning {
-  animation: m3-drop 320ms cubic-bezier(0.18, 0.7, 0.45, 1.35);
+/* Падение «вся колонка как лента»: длительность и амплитуда пропорциональны
+   числу пройденных строк (`--fall-rows`). Все фишки движутся с одной
+   скоростью, поэтому никогда не накладываются друг на друга — нижние просто
+   успевают остановиться раньше. Кривая ease-out имитирует гравитацию:
+   быстрый разгон → плавное касание дна. */
+.m3cell__anim--falling {
+  animation: m3-fall var(--fall-duration, 300ms) cubic-bezier(0.33, 0, 0.2, 1);
+  animation-fill-mode: backwards;
 }
-@keyframes m3-drop {
+@keyframes m3-fall {
   0% {
-    transform: translateY(-110%) scale(0.55);
+    transform: translateY(calc(var(--fall-rows, 1) * -100%));
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* «Pop» — для бустеров, появившихся на месте удалённого матча: они не падают
+   сверху, а вспыхивают в своей клетке, привлекая внимание игрока. */
+.m3cell__anim--popping {
+  animation: m3-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation-fill-mode: backwards;
+}
+@keyframes m3-pop {
+  0% {
+    transform: scale(0.3);
     opacity: 0;
   }
-  55% {
-    transform: translateY(8%) scale(1.08);
-    opacity: 1;
-  }
-  78% {
-    transform: translateY(-2%) scale(0.97);
+  60% {
+    transform: scale(1.12);
     opacity: 1;
   }
   100% {
-    transform: translateY(0) scale(1);
+    transform: scale(1);
     opacity: 1;
   }
 }

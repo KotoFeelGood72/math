@@ -247,9 +247,12 @@ export function findMatches(board, stoneHp = null) {
     }
   }
 
-  // квадраты 2×2 (популярное правило: 4 одинаковых в блоке тоже матч)
-  // Представляем их как 2 "ран-а" длиной 2, пересекающихся в (r,c),
-  // чтобы группировка и создание "бомбы" работали без отдельной логики.
+  // квадраты 2×2 (популярное правило: 4 одинаковых в блоке тоже матч).
+  // Представляем их как 4 пересекающихся "ран-а" длиной 2 (по верхней/нижней
+  // строкам и левому/правому столбцам), чтобы группировка и создание "бомбы"
+  // работали без отдельной логики, а в `cells` группы попали ВСЕ 4 клетки
+  // квадрата (двух ранов было мало — они покрывали L-форму из 3 клеток,
+  // из-за чего четвёртая фишка не учитывалась в счёт цели).
   for (let r = 0; r < rows - 1; r += 1) {
     for (let c = 0; c < cols - 1; c += 1) {
       const a = board[r][c]
@@ -267,7 +270,9 @@ export function findMatches(board, stoneHp = null) {
         sameNormalColor(a, board[r + 1][c + 1])
       ) {
         runs.push({ dir: 'h', r, c, len: 2 })
+        runs.push({ dir: 'h', r: r + 1, c, len: 2 })
         runs.push({ dir: 'v', r, c, len: 2 })
+        runs.push({ dir: 'v', r, c: c + 1, len: 2 })
       }
     }
   }
@@ -535,15 +540,24 @@ export function placeSpecial(board, pos, kind, color) {
 
 /** Гравитация: сдвинуть непустые вниз, пустые наверх. Заблокированные клетки
  *  делят колонку на сегменты — фишки не проходят сквозь них. */
+/**
+ * Применить «гравитацию»: смещает существующие фишки вниз внутри каждой
+ * колонки (BLOCKED разбивает колонку на независимые сегменты). Возвращает
+ * не только новую доску, но и карту источников: для каждой непустой клетки
+ * (`fromRow[r][c]`) — её исходная строка ДО гравитации. Это нужно для
+ * визуальной анимации падения: смещение каждой фишки = `r - fromRow[r][c]`.
+ * Для BLOCKED/EMPTY клеток `fromRow[r][c] = -1`.
+ * @returns {{ board: number[][], fromRow: number[][] }}
+ */
 export function applyGravity(board) {
   const rows = board.length
   const cols = board[0].length
   const next = cloneBoard(board)
+  const fromRow = Array.from({ length: rows }, () => new Array(cols).fill(-1))
   for (let c = 0; c < cols; c += 1) {
     let write = rows - 1
     for (let r = rows - 1; r >= 0; r -= 1) {
       if (next[r][c] === BLOCKED) {
-        // закрываем сегмент: следующая запись будет ВЫШЕ блока
         write = r - 1
         continue
       }
@@ -551,11 +565,12 @@ export function applyGravity(board) {
         const v = next[r][c]
         next[r][c] = EMPTY
         next[write][c] = v
+        fromRow[write][c] = r
         write -= 1
       }
     }
   }
-  return next
+  return { board: next, fromRow }
 }
 
 /**
@@ -597,16 +612,39 @@ export function reshuffleBoardPreservingPieces(board, stoneHp, rng, maxAttempts 
 }
 
 /** Заполнить пустые ячейки сверху случайными цветами. Заблокированные пропускаем. */
+/**
+ * Заполнить пустые клетки случайными цветами. Возвращает доску и карту
+ * «виртуальных» исходных строк для новых фишек: для каждой новой клетки
+ * (`newFromRow[r][c]`) указывается отрицательное значение — её условная
+ * «строка над доской» в порядке появления внутри колонки/сегмента
+ * (нижняя новая = -1, над ней = -2 и т.д.). Для остальных клеток = 0.
+ *
+ * Это нужно, чтобы новые фишки в визуальной анимации падения двигались
+ * как естественное продолжение колонки: с тем же смещением, что и съехавшие
+ * существующие, не «обгоняя» и не «наезжая» на них.
+ * @returns {{ board: number[][], newFromRow: number[][] }}
+ */
 export function refill(board, colors, rng) {
   const rows = board.length
   const cols = board[0].length
   const next = cloneBoard(board)
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = 0; c < cols; c += 1) {
-      if (next[r][c] === EMPTY) next[r][c] = pickInt(rng, colors)
+  const newFromRow = Array.from({ length: rows }, () => new Array(cols).fill(0))
+  for (let c = 0; c < cols; c += 1) {
+    let newIdx = 0
+    for (let r = rows - 1; r >= 0; r -= 1) {
+      if (next[r][c] === BLOCKED) {
+        /* BLOCKED режет колонку на сегменты — счётчик «новых сверху» начинаем заново. */
+        newIdx = 0
+        continue
+      }
+      if (next[r][c] === EMPTY) {
+        next[r][c] = pickInt(rng, colors)
+        newIdx += 1
+        newFromRow[r][c] = -newIdx
+      }
     }
   }
-  return next
+  return { board: next, newFromRow }
 }
 
 /** Поменять местами две соседние ячейки. */

@@ -158,13 +158,19 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
   }
 
   /**
-   * Сколько «базовых» зарядов каждого типа выдать при старте обычного уровня (3 один раз, потом 0).
-   * @returns {number}
+   * Однократный стартовый бонус: при первом запуске игры начисляем по +3
+   * каждого типа бустеров прямо в запас (`storedBoosters`). В отличие от
+   * прежнего «base per level» эти бустеры не привязаны к одной партии и не
+   * пропадают при выходе/неудаче — игрок их использует по своему усмотрению.
+   * Идемпотентно: после первого вызова флаг сохраняется в облаке и в
+   * локальном бэкапе, повторно бонус не выдаётся.
+   * @returns {boolean} true — если бонус был только что начислён.
    */
-  function takePlayBoosterBasePerKind() {
-    if (claimedFreePlayBoosterTriplet.value) return 0
+  function grantInitialFreeBoosters() {
+    if (claimedFreePlayBoosterTriplet.value) return false
     claimedFreePlayBoosterTriplet.value = true
-    return 3
+    addStoredBoostersDelta({ bomb: 3, clock: 3, star: 3 })
+    return true
   }
 
   function trySpendCoins(amount) {
@@ -271,7 +277,7 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     consumeStoredBooster,
     setStoredBoosters,
     pullBoostersForLevel,
-    takePlayBoosterBasePerKind,
+    grantInitialFreeBoosters,
     trySpendCoins,
     getSnapshot,
     restoreSnapshot,

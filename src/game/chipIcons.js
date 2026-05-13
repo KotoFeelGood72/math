@@ -4,7 +4,7 @@
  */
 
 /** Индекс цвета палитры (0..5) → номер файла .png */
-export const CHIP_ICON_NUM_BY_COLOR_INDEX = [11, 10, 6, 8, 3, 7]
+export const CHIP_ICON_NUM_BY_COLOR_INDEX = [11, 10, 6, 8, 3, 14]
 
 export const RAINBOW_CHIP_ICON_NUM = 9
 

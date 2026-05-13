@@ -129,6 +129,7 @@
           :matched-keys="matchedKeys"
           :clear-fx="clearFx"
           :spawned-keys="spawnedKeys"
+          :fall-deltas="fallDeltas"
           :disabled="isBusy || status !== 'playing' || paused || tutorialBoardLocked"
           :hint-cell-key="hintCellKey"
           :tutorial-from-key="tutorialCellFromKey"
@@ -183,6 +184,7 @@
       <div ref="boostRowRef" class="play__boost-row" role="toolbar" aria-label="Усилители">
         <button
           type="button"
+          data-tutorial-booster="bomb"
           class="play__boost-btn"
           :class="{ 'play__boost-btn--on': boosterPick === 'bomb' }"
           :disabled="boostBarDisabled"
@@ -215,6 +217,7 @@
         </button>
         <button
           type="button"
+          data-tutorial-booster="clock"
           class="play__boost-btn"
           :disabled="boostBarDisabled"
           :title="
@@ -246,6 +249,7 @@
         </button>
         <button
           type="button"
+          data-tutorial-booster="star"
           class="play__boost-btn"
           :class="{ 'play__boost-btn--on': boosterPick === 'star' }"
           :disabled="boostBarDisabled"
@@ -531,6 +535,7 @@ const {
   matchedKeys,
   clearFx,
   spawnedKeys,
+  fallDeltas,
   isBusy,
   stoneProgress,
   boosterBomb,
@@ -590,6 +595,9 @@ function startHudTourIfNeeded() {
   const movesEl = movesPillRef.value
   const boostEl = boostRowRef.value
   if (!goalsEl || !movesEl || !boostEl) return
+  const bombBtnEl = boostEl.querySelector('[data-tutorial-booster="bomb"]')
+  const clockBtnEl = boostEl.querySelector('[data-tutorial-booster="clock"]')
+  const starBtnEl = boostEl.querySelector('[data-tutorial-booster="star"]')
 
   tutorialHudTourActive.value = true
   hudTour = driver({
@@ -610,7 +618,13 @@ function startHudTourIfNeeded() {
     },
   })
 
-  hudTour.setSteps([
+  /**
+   * Шаги обучения. Бустеры показываем отдельными плашками — каждая подсвечивает
+   * конкретную кнопку: так игрок видит, где именно тот или иной усилитель.
+   * Если по какой-то причине отдельная кнопка не найдена в DOM, фоллбэк
+   * на общий контейнер `boostEl` — лучше показать общую плашку, чем ничего.
+   */
+  const steps = [
     {
       element: goalsEl,
       popover: {
@@ -630,18 +644,37 @@ function startHudTourIfNeeded() {
       },
     },
     {
-      element: boostEl,
+      element: bombBtnEl ?? boostEl,
       popover: {
-        title: 'Усилители',
+        title: BOOSTER_DISPLAY_NAME.bomb,
         description:
-          'Нажми на усилитель, затем выбери клетку на поле.\n' +
-          `${BOOSTER_DISPLAY_NAME.bomb} — взрыв 3×3. ${BOOSTER_DISPLAY_NAME.star} — убирает все фишки выбранного цвета.\n` +
-          `${BOOSTER_DISPLAY_NAME.clock} — откат хода или +ходы, если откатывать нечего.`,
+          'Взрыв 3×3. Нажми на иконку, затем выбери клетку на поле.',
         side: 'top',
         align: 'center',
       },
     },
-  ])
+    {
+      element: clockBtnEl ?? boostEl,
+      popover: {
+        title: BOOSTER_DISPLAY_NAME.clock,
+        description:
+          'Откат последнего хода. Если откатывать нечего — добавит ходы.',
+        side: 'top',
+        align: 'center',
+      },
+    },
+    {
+      element: starBtnEl ?? boostEl,
+      popover: {
+        title: BOOSTER_DISPLAY_NAME.star,
+        description:
+          'Убирает все фишки выбранного цвета. Нажми на иконку, затем выбери клетку.',
+        side: 'top',
+        align: 'center',
+      },
+    },
+  ]
+  hudTour.setSteps(steps)
 
   hudTour.drive()
 }
@@ -919,7 +952,7 @@ const noMovesActionBusy = ref(false)
 const noMovesAdBusy = ref(false)
 
 /** Подсказка: после 30 с бездействия — ключ ячейки "r,c" для покачивания фишки. */
-const HINT_IDLE_MS = 30_000
+const HINT_IDLE_MS = 10_000
 const hintCellKey = ref('')
 let idleHintTimer = 0
 
