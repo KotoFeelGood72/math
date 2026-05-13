@@ -117,7 +117,10 @@
           </div>
         </section>
 
-        <section class="settings__panel m3-modal-panel" aria-label="Навигация">
+        <section
+          class="settings__panel settings__panel--compact-nav m3-modal-panel"
+          aria-label="Навигация"
+        >
           <h2 class="settings__panel-title settings__panel-title--solo">
             Разделы
           </h2>
@@ -522,31 +525,40 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
+.settings__panel--compact-nav {
+  gap: 0.28rem;
+  padding: 0.62rem 0.85rem 0.68rem;
+}
+
+.settings__panel--compact-nav .settings__panel-title--solo {
+  margin-bottom: 0.16rem;
+}
+
 .settings__link-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 0.72rem 0.85rem;
-  border: 3px solid rgba(110, 57, 17, 0.35);
-  border-radius: 16px;
+  padding: 0.42rem 0.65rem;
+  border: 2px solid rgba(110, 57, 17, 0.35);
+  border-radius: 12px;
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.65) 0%,
     rgba(230, 215, 185, 0.5) 100%
   );
   color: #4a2810;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.55),
-    0 2px 0 rgba(110, 57, 17, 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 1px 0 rgba(110, 57, 17, 0.2);
 }
 
 .settings__link-row + .settings__link-row {
-  margin-top: 0.45rem;
+  margin-top: 0.2rem;
 }
 
 .settings__link-row:active {
@@ -554,7 +566,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .settings__link-chevron {
-  font-size: 1.35rem;
+  font-size: 1.12rem;
   color: #c67612;
   font-weight: 900;
 }
@@ -563,12 +575,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.12rem;
+  gap: 0.04rem;
   text-align: left;
 }
 
 .settings__link-sub {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 650;
   opacity: 0.88;
 }

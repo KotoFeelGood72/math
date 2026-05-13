@@ -353,6 +353,66 @@
       </div>
 
       <div
+        v-if="status === 'no_moves'"
+        class="m3-modal-overlay play__no-moves-scrim"
+        role="presentation"
+      >
+        <div
+          class="m3-modal-panel play__no-moves-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="play-no-moves-title"
+          @click.stop
+        >
+          <span id="play-no-moves-title" class="m3-ribbon play__no-moves-ribbon">
+            <span class="m3-ribbon__line">Нет ходов</span>
+          </span>
+          <p class="play__no-moves-lead">
+            {{ noMovesLeadText }}
+          </p>
+          <div class="play__no-moves-actions">
+            <MenuActionButton
+              v-if="!noMovesFreeShuffleUsed"
+              variant="hero"
+              class="play__no-moves-btn"
+              :disabled="noMovesActionBusy || noMovesAdBusy"
+              @click="onNoMovesShuffleFree"
+            >
+              Перемешать
+            </MenuActionButton>
+            <MenuActionButton
+              variant="hero"
+              class="play__no-moves-btn play__no-moves-btn--coins"
+              :disabled="
+                noMovesActionBusy ||
+                noMovesAdBusy ||
+                coins < NO_MOVES_SHUFFLE_COIN_COST
+              "
+              @click="onNoMovesShuffleForCoins"
+            >
+              За {{ NO_MOVES_SHUFFLE_COIN_COST }} монет
+            </MenuActionButton>
+            <MenuActionButton
+              variant="hero"
+              class="play__no-moves-btn play__no-moves-btn--ad"
+              :disabled="noMovesActionBusy || noMovesAdBusy"
+              @click="watchNoMovesRewardedAd"
+            >
+              Реклама · +{{ REWARD_MOVES_FROM_AD }} ходов
+            </MenuActionButton>
+            <button
+              type="button"
+              class="play__no-moves-surrender"
+              :disabled="noMovesActionBusy || noMovesAdBusy"
+              @click="onNoMovesSurrender"
+            >
+              Сдаться
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
         v-if="lossModalVisible && status === 'lost'"
         class="m3-modal-overlay play__loss-scrim"
         role="presentation"
@@ -414,8 +474,11 @@ import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { getBoardChipIconUrl, getBoosterIconUrl, getStoneIconUrl } from '@/game/chipIcons.js'
 import { findHintSwap } from '@/game/match3Engine.js'
-import { getColor } from '@/stores/match3Game'
-import { useMatch3GameStore } from '@/stores/match3Game'
+import {
+  getColor,
+  NO_MOVES_SHUFFLE_COIN_COST,
+  useMatch3GameStore,
+} from '@/stores/match3Game'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
 import { useYandexGamesStore } from '@/stores/yandexGames'
 import { useAudioSettingsStore } from '@/stores/audioSettings'
@@ -434,6 +497,7 @@ const route = useRoute()
 const router = useRouter()
 const game = useMatch3GameStore()
 const progress = useMatch3ProgressStore()
+const { coins } = storeToRefs(progress)
 const yandexGames = useYandexGamesStore()
 const audioSettings = useAudioSettingsStore()
 
@@ -456,6 +520,7 @@ const {
   score,
   movesLeft,
   status,
+  lostReason,
   stars,
   coinsEarned,
   objective,
@@ -468,7 +533,14 @@ const {
   boosterClock,
   boosterStar,
   lastUserSwap,
+  noMovesFreeShuffleUsed,
 } = storeToRefs(game)
+
+const noMovesLeadText = computed(() =>
+  noMovesFreeShuffleUsed.value
+    ? 'Бесплатное перемешивание уже использовано. За монеты, рекламу или сдаться.'
+    : 'Выберите действие: бесплатное перемешивание (один раз за уровень), за монеты, бонус за рекламу или сдаться.',
+)
 
 const tutorialActive = computed(() => progress.needsTutorial && levelId.value === 1)
 const tutorialExpected = { r: 2, c: 1, dr: 0, dc: 1 }
@@ -818,6 +890,8 @@ const REWARD_MOVES_FROM_AD = 5
 
 const lossModalVisible = ref(false)
 const lossAdBusy = ref(false)
+const noMovesActionBusy = ref(false)
+const noMovesAdBusy = ref(false)
 
 /** Подсказка: после 30 с бездействия — ключ ячейки "r,c" для покачивания фишки. */
 const HINT_IDLE_MS = 30_000
@@ -1003,7 +1077,13 @@ watch(
 watch(status, (s) => {
   if (s !== 'playing') {
     paused.value = false
-    resumeBgmAfterClosingPause()
+    boosterPick.value = null
+    if (s === 'no_moves') {
+      pauseBackgroundMusic()
+      yandexGames.notifyGameplayStop()
+    } else {
+      resumeBgmAfterClosingPause()
+    }
     clearIdleHintTimer()
     hintCellKey.value = ''
   }
@@ -1087,6 +1167,10 @@ watch(status, async (s) => {
   if (s !== 'won' && s !== 'lost') return
   if (s === 'lost') {
     playGameOverSfx(audioSettings.effectiveSfxVolume)
+    if (lostReason.value === 'surrender') {
+      await navigateToLossResult({ skipDelay: true })
+      return
+    }
     lossModalVisible.value = true
     return
   }
@@ -1107,9 +1191,11 @@ watch(status, async (s) => {
   })
 })
 
-async function finishLossToResult() {
-  lossModalVisible.value = false
-  await new Promise((r) => setTimeout(r, 280))
+async function navigateToLossResult(opts = {}) {
+  const skipDelay = !!opts.skipDelay
+  if (!skipDelay) {
+    await new Promise((r) => setTimeout(r, 280))
+  }
   yandexGames.notifyGameplayStop()
   await yandexGames.hideStickyBannerAdv()
   await yandexGames.showFullscreenAdv({ resumeAudioAfterClose: false })
@@ -1123,6 +1209,11 @@ async function finishLossToResult() {
       result: 'lost',
     },
   })
+}
+
+async function finishLossToResult() {
+  lossModalVisible.value = false
+  await navigateToLossResult()
 }
 
 async function watchAdContinueAfterLoss() {
@@ -1223,6 +1314,59 @@ async function watchRewardedForMoves() {
   }
 }
 
+async function onNoMovesShuffleFree() {
+  if (status.value !== 'no_moves' || noMovesActionBusy.value || noMovesAdBusy.value) return
+  noMovesActionBusy.value = true
+  tryBgmOnBoardInteraction()
+  try {
+    const ok = await game.resolveNoMovesShuffleFree()
+    if (ok) {
+      yandexGames.notifyGameplayStart()
+      resumeBgmFromUserGesture()
+      bumpUserActivity()
+    }
+  } finally {
+    noMovesActionBusy.value = false
+  }
+}
+
+async function onNoMovesShuffleForCoins() {
+  if (status.value !== 'no_moves' || noMovesActionBusy.value || noMovesAdBusy.value) return
+  noMovesActionBusy.value = true
+  tryBgmOnBoardInteraction()
+  try {
+    const ok = await game.resolveNoMovesShuffleForCoins()
+    if (ok) {
+      yandexGames.notifyGameplayStart()
+      resumeBgmFromUserGesture()
+      bumpUserActivity()
+    }
+  } finally {
+    noMovesActionBusy.value = false
+  }
+}
+
+async function watchNoMovesRewardedAd() {
+  if (status.value !== 'no_moves' || noMovesActionBusy.value || noMovesAdBusy.value) return
+  noMovesAdBusy.value = true
+  tryBgmOnBoardInteraction()
+  try {
+    const res = await yandexGames.showRewardedVideo()
+    if (res.rewarded && (await game.resolveNoMovesAfterRewardedAd(REWARD_MOVES_FROM_AD))) {
+      yandexGames.notifyGameplayStart()
+      resumeBgmFromUserGesture()
+      bumpUserActivity()
+    }
+  } finally {
+    noMovesAdBusy.value = false
+  }
+}
+
+function onNoMovesSurrender() {
+  if (status.value !== 'no_moves' || noMovesActionBusy.value || noMovesAdBusy.value) return
+  game.resolveNoMovesSurrender()
+}
+
 async function onTap(payload) {
   tryBgmOnBoardInteraction()
   bumpUserActivity()
@@ -1315,6 +1459,72 @@ async function exitToMenu() {
 .play__pause-actions {
   justify-content: center;
   gap: 1.05rem;
+}
+
+.play__no-moves-scrim {
+  z-index: 225;
+}
+
+.play__no-moves-dialog {
+  width: min(100%, 320px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 2.05rem 1.15rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.play__no-moves-ribbon {
+  position: absolute;
+  top: -1.05rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.88rem;
+  z-index: 2;
+}
+
+.play__no-moves-lead {
+  margin: 0;
+  padding: 2rem 0 0;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--m3-text-on-wood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.play__no-moves-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.play__no-moves-btn {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.play__no-moves-surrender {
+  margin: 0.35rem 0 0;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6e3911;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
+.play__no-moves-surrender:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .play__loss-scrim {
@@ -1526,10 +1736,8 @@ async function exitToMenu() {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  /* Высота как у ряда иконок цели (.play__goal-icon 1.45rem) */
-  min-height: 1.45rem;
-  max-height: 1.45rem;
-  padding: 0;
+  min-height: var(--play-goals-inner-min-h);
+  padding: 0 0.15rem;
 }
 
 .play__goals-booster-hint-text {
@@ -1569,6 +1777,8 @@ async function exitToMenu() {
     0 3px 0 rgba(110, 57, 17, 0.55);
 }
 .play__hud-card--goals {
+  /* Общая минимальная «рабочая» высота блока целей и подсказки бустера */
+  --play-goals-inner-min-h: max(1.45rem, calc(1.15rem * 1.32));
   padding: 0.42rem 0.8rem 0.45rem;
   gap: 0;
   border-color: #5c5852;
@@ -1580,6 +1790,7 @@ async function exitToMenu() {
   justify-content: space-between;
   gap: 0.55rem;
   min-width: 0;
+  min-height: var(--play-goals-inner-min-h);
 }
 .play__hud-label--goals-title {
   font-size: 0.68rem;

@@ -41,6 +41,8 @@ const MATCH_FLASH_MS = 280
 const SPAWN_MS = 320
 /** Если стек отката пуст — бустер «время» даёт доп. ходы вместо отмены хода. */
 const CLOCK_EXTRA_MOVES_WHEN_NO_UNDO = 3
+/** Перемешивание при «нет ходов» за монеты (см. модалку на экране игры). */
+export const NO_MOVES_SHUFFLE_COIN_COST = 35
 
 export const useMatch3GameStore = defineStore('match3-game', () => {
   /** @type {import('vue').Ref<ReturnType<typeof getLevelConfig> | null>} */
@@ -56,6 +58,8 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
   const movesLeft = ref(0)
   const collected = ref(0)
   const status = ref('idle')
+  /** @type {import('vue').Ref<'moves' | 'surrender' | null>} — зачем проигрыш (модалка / сразу к результату). */
+  const lostReason = ref(null)
   const stars = ref(0)
   const coinsEarned = ref(0)
   const isBusy = ref(false)
@@ -65,6 +69,8 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
   const clearFx = ref(null)
   const spawnedKeys = ref(new Set())
   const lastUserSwap = ref(null)
+  /** Бесплатное перемешивание при «нет ходов» — не более одного за уровень. */
+  const noMovesFreeShuffleUsed = ref(false)
 
   /** Снимки для отката хода (макс. 3 последних хода с бустерами). */
   /** @type {import('vue').Ref<object[]>} */
@@ -137,6 +143,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     movesLeft.value = cfg.moves
     collected.value = 0
     status.value = 'playing'
+    lostReason.value = null
     stars.value = 0
     coinsEarned.value = 0
     isBusy.value = false
@@ -145,6 +152,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     clearFx.value = null
     spawnedKeys.value = new Set()
     lastUserSwap.value = null
+    noMovesFreeShuffleUsed.value = false
     useMatch3StatsStore().noteLevelStarted()
     undoStack.value = []
     const extra = useTutorial
@@ -367,27 +375,81 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     stats.noteCascade(cascades)
 
     if (!hasAnyMove(board.value, stoneHp.value)) {
-      await wait(220)
-      const shuffled = reshuffleBoardPreservingPieces(
-        board.value,
-        stoneHp.value,
-        rng,
-      )
-      if (shuffled) {
-        board.value = shuffled
-        return
-      }
-      let rebuilt = board.value
-      for (let i = 0; i < 48; i += 1) {
-        rebuilt = buildLevelBoard({
-          ...cfg,
-          seed: (cfg.seed ^ Date.now() ^ (i * 0x9e3779b9)) >>> 0,
-        })
-        if (hasAnyMove(rebuilt, stoneHp.value)) break
-      }
-      board.value = rebuilt
-      // Камни на поле не сбрасываем при перегенерации фишек
+      status.value = 'no_moves'
     }
+  }
+
+  /** Внутренняя перестройка доски при тупике (раньше вызывалась автоматически из runCascades). */
+  async function applyDeadlockBoardFix() {
+    const cfg = config.value
+    if (!cfg) return
+    await wait(220)
+    const shuffled = reshuffleBoardPreservingPieces(
+      board.value,
+      stoneHp.value,
+      rng,
+    )
+    if (shuffled) {
+      board.value = shuffled
+      return
+    }
+    let rebuilt = board.value
+    for (let i = 0; i < 48; i += 1) {
+      rebuilt = buildLevelBoard({
+        ...cfg,
+        seed: (cfg.seed ^ Date.now() ^ (i * 0x9e3779b9)) >>> 0,
+      })
+      if (hasAnyMove(rebuilt, stoneHp.value)) break
+    }
+    board.value = rebuilt
+  }
+
+  async function resolveNoMovesShuffleFree() {
+    if (status.value !== 'no_moves' || noMovesFreeShuffleUsed.value) return false
+    await applyDeadlockBoardFix()
+    noMovesFreeShuffleUsed.value = true
+    status.value = 'playing'
+    selected.value = null
+    matchedKeys.value = new Set()
+    clearFx.value = null
+    spawnedKeys.value = new Set()
+    return true
+  }
+
+  async function resolveNoMovesShuffleForCoins() {
+    if (status.value !== 'no_moves') return false
+    const progress = useMatch3ProgressStore()
+    if (!progress.trySpendCoins(NO_MOVES_SHUFFLE_COIN_COST)) return false
+    await applyDeadlockBoardFix()
+    status.value = 'playing'
+    selected.value = null
+    matchedKeys.value = new Set()
+    clearFx.value = null
+    spawnedKeys.value = new Set()
+    return true
+  }
+
+  /** Rewarded: +ходы и перестройка, иначе игрок снова без ходов. */
+  async function resolveNoMovesAfterRewardedAd(delta) {
+    if (status.value !== 'no_moves') return false
+    const n = Math.max(1, delta | 0)
+    movesLeft.value += n
+    await applyDeadlockBoardFix()
+    status.value = 'playing'
+    selected.value = null
+    matchedKeys.value = new Set()
+    clearFx.value = null
+    spawnedKeys.value = new Set()
+    return true
+  }
+
+  function resolveNoMovesSurrender() {
+    if (status.value !== 'no_moves') return false
+    lostReason.value = 'surrender'
+    stars.value = 0
+    coinsEarned.value = 0
+    status.value = 'lost'
+    return true
   }
 
   /**
@@ -504,6 +566,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     const won = stonesDone && mainDone
 
     if (won) {
+      lostReason.value = null
       status.value = 'won'
       stars.value = evaluateStars(cfg, {
         won: true,
@@ -523,6 +586,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       return
     }
     if (movesLeft.value <= 0) {
+      lostReason.value = 'moves'
       status.value = 'lost'
       stars.value = 0
       coinsEarned.value = 0
@@ -641,6 +705,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
   function resumeAfterLossWithMoves(delta) {
     if (status.value !== 'lost') return false
     const n = Math.max(1, delta | 0)
+    lostReason.value = null
     status.value = 'playing'
     movesLeft.value += n
     selected.value = null
@@ -652,6 +717,8 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
 
   function quit() {
     status.value = 'idle'
+    lostReason.value = null
+    noMovesFreeShuffleUsed.value = false
     config.value = null
     board.value = []
     stoneHp.value = []
@@ -676,6 +743,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     movesLeft,
     collected,
     status,
+    lostReason,
     stars,
     coinsEarned,
     isBusy,
@@ -684,6 +752,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     clearFx,
     spawnedKeys,
     lastUserSwap,
+    noMovesFreeShuffleUsed,
     boosterBomb,
     boosterClock,
     boosterStar,
@@ -699,6 +768,10 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     grantBonusMoves,
     grantBoosterFromRewardAd,
     resumeAfterLossWithMoves,
+    resolveNoMovesShuffleFree,
+    resolveNoMovesShuffleForCoins,
+    resolveNoMovesAfterRewardedAd,
+    resolveNoMovesSurrender,
     quit,
   }
 })

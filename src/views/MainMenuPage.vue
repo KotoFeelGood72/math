@@ -151,8 +151,6 @@ function goSettings() {
 
 .menu__coin-pill {
   cursor: pointer;
-  font: inherit;
-  color: inherit;
   -webkit-tap-highlight-color: transparent;
 }
 

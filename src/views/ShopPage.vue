@@ -37,30 +37,23 @@
         </div>
       </div>
 
-      <ul class="shop__list" role="list">
-        <li v-for="offer in SHOP_OFFERS" :key="offer.id" class="shop__card m3-modal-panel">
-          <div class="shop__card-main">
-            <div class="shop__card-icons" aria-hidden="true">
-              <template v-if="offer.type === 'single'">
-                <img :src="boosterIcon(offer.kind)" alt="" class="shop__offer-ico" />
-              </template>
-              <template v-else>
-                <img :src="iconBomb" alt="" class="shop__offer-ico" />
-                <img :src="iconClock" alt="" class="shop__offer-ico" />
-                <img :src="iconStar" alt="" class="shop__offer-ico" />
-              </template>
-            </div>
-            <div class="shop__card-text">
-              <h2 class="shop__card-title">{{ offer.title }}</h2>
-              <p class="shop__card-hint">{{ offer.hint }}</p>
-            </div>
+      <ul class="shop__grid" role="list">
+        <li
+          v-for="cell in gridCells"
+          :key="cell.index"
+          class="shop__cell m3-modal-panel"
+        >
+          <div class="shop__sticker-wrap">
+            <img :src="cell.stickerUrl" alt="" class="shop__sticker" draggable="false" />
           </div>
-          <div class="shop__card-buy">
+          <h2 class="shop__cell-title">{{ cell.offer.title }}</h2>
+          <p class="shop__cell-hint">{{ cell.offer.hint }}</p>
+          <div class="shop__cell-buy">
             <span class="shop__price">
               <Icon icon="mdi:cash" class="shop__price-ic" aria-hidden="true" />
-              {{ offer.price }}
+              {{ cell.offer.price }}
             </span>
-            <button type="button" class="shop__buy-btn" @click="buy(offer)">Купить</button>
+            <button type="button" class="shop__buy-btn" @click="buy(cell.offer)">Купить</button>
           </div>
         </li>
       </ul>
@@ -88,6 +81,7 @@ import { Icon } from '@iconify/vue'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
 import { SHOP_OFFERS } from '@/game/shopCatalog.js'
 import { getBoosterIconUrl } from '@/game/chipIcons.js'
+import { getStickerUrls2x2 } from '@/game/shopStickers.js'
 
 const router = useRouter()
 const progress = useMatch3ProgressStore()
@@ -96,6 +90,15 @@ const { coins, storedBoosters } = storeToRefs(progress)
 const iconBomb = computed(() => getBoosterIconUrl('bomb'))
 const iconClock = computed(() => getBoosterIconUrl('clock'))
 const iconStar = computed(() => getBoosterIconUrl('star'))
+
+const stickerUrls2x2 = getStickerUrls2x2()
+const gridCells = computed(() =>
+  stickerUrls2x2.map((stickerUrl, index) => ({
+    index,
+    stickerUrl,
+    offer: SHOP_OFFERS[index],
+  })),
+)
 
 const toast = ref('')
 let toastTimer = 0
@@ -107,10 +110,6 @@ function showToast(msg) {
     toast.value = ''
     toastTimer = 0
   }, 2200)
-}
-
-function boosterIcon(kind) {
-  return getBoosterIconUrl(kind) ?? ''
 }
 
 function buy(offer) {
@@ -234,97 +233,111 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.12));
 }
 
-.shop__list {
+.shop__grid {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.shop__cell {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.55rem 0.5rem 0.58rem;
+  min-height: 0;
 }
 
-.shop__card {
+.shop__sticker-wrap {
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(230, 240, 255, 0.45) 100%);
+  border: 2px solid rgba(110, 57, 17, 0.22);
   display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.75rem 0.8rem;
-}
-
-.shop__card-main {
-  display: flex;
-  gap: 0.55rem;
-  align-items: flex-start;
-}
-
-.shop__card-icons {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 0.2rem;
   align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.shop__offer-ico {
-  width: 2.35rem;
-  height: 2.35rem;
+.shop__sticker {
+  width: 88%;
+  height: 88%;
   object-fit: contain;
-  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.15));
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.12));
 }
 
-.shop__card-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.shop__card-title {
-  margin: 0 0 0.2rem;
-  font-size: 1rem;
-  font-weight: 900;
-}
-
-.shop__card-hint {
+.shop__cell-title {
   margin: 0;
   font-size: 0.82rem;
-  line-height: 1.35;
-  opacity: 0.92;
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--m3-text-on-wood, #4a2810);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.shop__card-buy {
+.shop__cell-hint {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: center;
+  color: #5c4030;
+  opacity: 0.95;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.shop__cell-buy {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.32rem;
+  margin-top: auto;
+  padding-top: 0.2rem;
 }
 
 .shop__price {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
+  justify-content: center;
+  gap: 0.18rem;
   font-weight: 900;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   color: #6e3911;
 }
 
 .shop__price-ic {
-  font-size: 1.1rem;
+  font-size: 0.92rem;
   opacity: 0.85;
 }
 
 .shop__buy-btn {
   border: none;
   border-radius: 999px;
-  padding: 0.45rem 1.1rem;
+  padding: 0.4rem 0.5rem;
   font-weight: 900;
-  font-size: 0.88rem;
-  letter-spacing: 0.04em;
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
   cursor: pointer;
   color: #fff;
   background: linear-gradient(180deg, #5cbf6a 0%, #3a9d4a 100%);
-  box-shadow: 0 3px 0 rgba(30, 90, 40, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 0 rgba(30, 90, 40, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .shop__buy-btn:active {
   transform: translateY(1px);
-  box-shadow: 0 2px 0 rgba(30, 90, 40, 0.45);
+  box-shadow: 0 1px 0 rgba(30, 90, 40, 0.45);
 }
 
 .shop__toast {

@@ -982,6 +982,22 @@ body {
     inset 0 -2px 0 rgba(110, 57, 17, 0.3),
     0 2px 0 rgba(110, 57, 17, 0.5);
 }
+
+/* Кнопка с тем же классом — без UA-стилей, иначе шрифт/высота отличаются от span */
+button.m3-top-pill {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--m3-text-on-wood);
+  line-height: 1.15;
+  box-sizing: border-box;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
 .m3-top-pill__icon {
   width: 1.55rem;
   height: 1.55rem;
