@@ -112,23 +112,49 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
   }
 
   /**
-   * Забрать часть запаса в текущую партию (вызывается из match3Game.startLevel).
+   * Сколько единиц каждого бустера можно «занести» из запаса в текущую партию.
+   * Не модифицирует `storedBoosters` — запас остаётся canonical source of truth,
+   * расход синхронизируется через `consumeStoredBooster` при фактическом
+   * использовании бустера в игре (см. match3Game). Так купленные/полученные
+   * за рекламу бустеры не пропадают при выходе/перезагрузке посреди уровня.
    * @returns {{ bomb: number, clock: number, star: number }}
    */
   function pullBoostersForLevel() {
     const cur = storedBoosters.value
-    const curBomb = boosterInt(cur.bomb)
-    const curClock = boosterInt(cur.clock)
-    const curStar = boosterInt(cur.star)
-    const bomb = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, curBomb)
-    const clock = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, curClock)
-    const star = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, curStar)
-    storedBoosters.value = {
-      bomb: clampBoosterCount(curBomb - bomb),
-      clock: clampBoosterCount(curClock - clock),
-      star: clampBoosterCount(curStar - star),
+    return {
+      bomb: Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, boosterInt(cur.bomb)),
+      clock: Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, boosterInt(cur.clock)),
+      star: Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, boosterInt(cur.star)),
     }
-    return { bomb, clock, star }
+  }
+
+  /**
+   * Снять `n` единиц бустера из запаса при фактическом использовании в партии.
+   * Возвращает true, если удалось списать (был запас).
+   * @param {'bomb'|'clock'|'star'} kind
+   * @param {number} [n=1]
+   */
+  function consumeStoredBooster(kind, n = 1) {
+    const d = boosterInt(n)
+    if (d <= 0) return false
+    const cur = storedBoosters.value
+    const curVal = boosterInt(cur[kind])
+    if (curVal <= 0) return false
+    storedBoosters.value = {
+      ...cur,
+      [kind]: clampBoosterCount(curVal - d),
+    }
+    return true
+  }
+
+  /** Прямая установка запаса (используется при undo в партии). */
+  function setStoredBoosters(snap) {
+    if (!snap || typeof snap !== 'object') return
+    storedBoosters.value = {
+      bomb: clampBoosterCount(boosterInt(snap.bomb)),
+      clock: clampBoosterCount(boosterInt(snap.clock)),
+      star: clampBoosterCount(boosterInt(snap.star)),
+    }
   }
 
   /**
@@ -242,6 +268,8 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     addCoins,
     addStoredBooster,
     addStoredBoostersDelta,
+    consumeStoredBooster,
+    setStoredBoosters,
     pullBoostersForLevel,
     takePlayBoosterBasePerKind,
     trySpendCoins,

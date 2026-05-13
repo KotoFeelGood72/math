@@ -78,6 +78,16 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
   const boosterBomb = ref(3)
   const boosterClock = ref(3)
   const boosterStar = ref(3)
+  /**
+   * Сколько единиц «из запаса» (`storedBoosters`) сейчас несут активные
+   * счётчики партии. Бесплатные базовые тратятся первыми; пока
+   * `boosterX > storedBoostersInLevel[x]` — расход идёт из базы, как только
+   * `boosterX <= storedBoostersInLevel[x]` — каждая трата дополнительно
+   * списывается из персистентного `storedBoosters` (см. chargeBoosterFromStored).
+   * Это позволяет сохранять купленные/полученные за рекламу бустеры даже
+   * если игрок вышел/перезагрузился посреди уровня.
+   */
+  const storedBoostersInLevel = ref({ bomb: 0, clock: 0, star: 0 })
 
   let rng = createRng(1)
 
@@ -155,17 +165,39 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     noMovesFreeShuffleUsed.value = false
     useMatch3StatsStore().noteLevelStarted()
     undoStack.value = []
+    const progress = useMatch3ProgressStore()
+    /* В туториале запас не используется и базовые 3 гарантированы. */
     const extra = useTutorial
       ? { bomb: 0, clock: 0, star: 0 }
-      : useMatch3ProgressStore().pullBoostersForLevel()
-    const progress = useMatch3ProgressStore()
+      : progress.pullBoostersForLevel()
     const basePerKind = useTutorial ? 3 : progress.takePlayBoosterBasePerKind()
+    storedBoostersInLevel.value = { bomb: extra.bomb, clock: extra.clock, star: extra.star }
     boosterBomb.value = basePerKind + extra.bomb
     boosterClock.value = basePerKind + extra.clock
     boosterStar.value = basePerKind + extra.star
   }
 
+  /**
+   * После трат (`boosterX -= 1`) проверяем, был ли расход «из запаса»:
+   * если `boosterX < storedBoostersInLevel[kind]`, значит до трат база уже
+   * закончилась и тратили stored → списываем единицу из персистентного
+   * `storedBoosters` и уменьшаем «активный» stored-счётчик партии.
+   */
+  function chargeBoosterFromStored(kind) {
+    const refMap = { bomb: boosterBomb, clock: boosterClock, star: boosterStar }
+    const counter = refMap[kind]
+    if (!counter) return
+    const inLevel = storedBoostersInLevel.value
+    if (counter.value < (inLevel[kind] | 0)) {
+      useMatch3ProgressStore().consumeStoredBooster(kind, 1)
+      storedBoostersInLevel.value = { ...inLevel, [kind]: Math.max(0, (inLevel[kind] | 0) - 1) }
+    }
+  }
+
   function pushUndoSnapshot() {
+    const progress = useMatch3ProgressStore()
+    const stored = progress.storedBoosters
+    const inLevel = storedBoostersInLevel.value
     const snap = {
       board: cloneBoard(board.value),
       stoneHp: stoneHp.value.map((row) => row.slice()),
@@ -175,6 +207,10 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       boosterBomb: boosterBomb.value,
       boosterClock: boosterClock.value,
       boosterStar: boosterStar.value,
+      /* Запоминаем запас и его «активную» проекцию на партии, чтобы undo
+         согласованно откатывал и persistent state, и инвариант chargeFromStored. */
+      storedBoosters: { bomb: stored.bomb, clock: stored.clock, star: stored.star },
+      storedBoostersInLevel: { bomb: inLevel.bomb, clock: inLevel.clock, star: inLevel.star },
     }
     const u = [...undoStack.value, snap]
     undoStack.value = u.length > 3 ? u.slice(-3) : u
@@ -189,6 +225,12 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     boosterBomb.value = snap.boosterBomb
     boosterClock.value = snap.boosterClock
     boosterStar.value = snap.boosterStar
+    if (snap.storedBoosters) {
+      useMatch3ProgressStore().setStoredBoosters(snap.storedBoosters)
+    }
+    if (snap.storedBoostersInLevel) {
+      storedBoostersInLevel.value = { ...snap.storedBoostersInLevel }
+    }
     matchedKeys.value = new Set()
     clearFx.value = null
     spawnedKeys.value = new Set()
@@ -606,6 +648,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
 
     if (undoStack.value.length === 0) {
       boosterClock.value -= 1
+      chargeBoosterFromStored('clock')
       movesLeft.value += CLOCK_EXTRA_MOVES_WHEN_NO_UNDO
       isBusy.value = false
       return true
@@ -619,6 +662,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     restoreFromUndoSnapshot(snap)
     // Снимок был до хода — в нём старое число часов; один бустер уже потрачен на откат.
     boosterClock.value = Math.max(0, snap.boosterClock - 1)
+    chargeBoosterFromStored('clock')
     isBusy.value = false
     return true
   }
@@ -636,6 +680,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     isBusy.value = true
     pushUndoSnapshot()
     boosterBomb.value -= 1
+    chargeBoosterFromStored('bomb')
     movesLeft.value -= 1
     stats.addMove()
     selected.value = null
@@ -665,6 +710,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     isBusy.value = true
     pushUndoSnapshot()
     boosterStar.value -= 1
+    chargeBoosterFromStored('star')
     movesLeft.value -= 1
     stats.addMove()
     selected.value = null
@@ -684,23 +730,26 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
 
   const BOOSTER_MAX_FROM_ADS = 9
 
-  /** +1 к выбранному бустеру после rewarded (не выше потолка). */
+  /**
+   * +1 к выбранному бустеру после rewarded (не выше потолка). Зачисляем
+   * одновременно в активный счётчик партии и в персистентный запас
+   * `storedBoosters`, чтобы награда не пропала при выходе/перезагрузке
+   * до завершения уровня. Если в партии достигнут потолок — в запас
+   * всё равно зачисляем (награда сохраняется до следующего раза).
+   */
   function grantBoosterFromRewardAd(kind) {
     if (status.value !== 'playing') return false
     const cap = BOOSTER_MAX_FROM_ADS
-    if (kind === 'bomb') {
-      boosterBomb.value = Math.min(cap, boosterBomb.value + 1)
-      return true
+    const refMap = { bomb: boosterBomb, clock: boosterClock, star: boosterStar }
+    const counter = refMap[kind]
+    if (!counter) return false
+    const inLevel = storedBoostersInLevel.value
+    if (counter.value < cap) {
+      counter.value += 1
+      storedBoostersInLevel.value = { ...inLevel, [kind]: (inLevel[kind] | 0) + 1 }
     }
-    if (kind === 'clock') {
-      boosterClock.value = Math.min(cap, boosterClock.value + 1)
-      return true
-    }
-    if (kind === 'star') {
-      boosterStar.value = Math.min(cap, boosterStar.value + 1)
-      return true
-    }
-    return false
+    useMatch3ProgressStore().addStoredBooster(kind, 1)
+    return true
   }
 
   /** После «нет ходов»: вернуть статус игры и добавить ходы (rewarded). */
@@ -734,6 +783,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     clearFx.value = null
     spawnedKeys.value = new Set()
     undoStack.value = []
+    storedBoostersInLevel.value = { bomb: 0, clock: 0, star: 0 }
   }
 
   return {
