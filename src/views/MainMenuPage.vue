@@ -1,5 +1,5 @@
 <template>
-  <PhoneFrame :parallax="false">
+  <PhoneFrame :parallax="false" :stickers="true">
     <div class="menu" data-allow-browser-scroll>
       <header class="menu__topbar">
         <button type="button" class="menu__cog" aria-label="Настройки" @click="goSettings">

@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useYandexGamesStore } from '@/stores/yandexGames'
 import MainMenuPage from '@/views/MainMenuPage.vue'
 import LevelSelectPage from '@/views/LevelSelectPage.vue'
 import Match3GamePage from '@/views/Match3GamePage.vue'
@@ -9,12 +10,24 @@ import StatisticsPage from '@/views/StatisticsPage.vue'
 import HowToPlayPage from '@/views/HowToPlayPage.vue'
 import ShopPage from '@/views/ShopPage.vue'
 
+/** До монтирования уровня: `YaGames.init()` и загрузка sdk (см. стор). */
+async function ensureYandexSdkBeforePlay() {
+  const yandexGames = useYandexGamesStore()
+  await yandexGames.initSdk()
+}
+
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', name: 'menu', component: MainMenuPage },
     { path: '/levels', name: 'levels', component: LevelSelectPage },
-    { path: '/play/:id', name: 'play', component: Match3GamePage, props: true },
+    {
+      path: '/play/:id',
+      name: 'play',
+      component: Match3GamePage,
+      props: true,
+      beforeEnter: ensureYandexSdkBeforePlay,
+    },
     { path: '/result', name: 'result', component: LevelResultPage },
     { path: '/profile', name: 'profile', component: ProfilePage },
     { path: '/settings', name: 'settings', component: SettingsPage },

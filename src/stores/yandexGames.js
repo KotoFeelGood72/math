@@ -1,31 +1,13 @@
 import { defineStore } from 'pinia'
 import { storeToRefs } from 'pinia'
-import { loadYandexGamesSdk } from '@/yandex/loadYandexGamesSdk'
+import { initYandexGamesSdk } from '@/yandex/yandexSdkInit.js'
 import {
-  pauseBackgroundMusic,
-  playBackgroundMusic,
-} from '@/audio/backgroundMusic.js'
-import { useAudioSettingsStore } from '@/stores/audioSettings.js'
+  acquireAudioFocusLock,
+  releaseAudioFocusLock,
+} from '@/audio/audioFocus.js'
 
-/**
- * Пауза фоновой музыки на время рекламы SDK (п. 4.7).
- */
-async function suspendSharedAudioForYandexAdv() {
-  pauseBackgroundMusic()
-}
-
-async function resumeSharedAudioAfterYandexAdv() {
-  const audio = useAudioSettingsStore()
-  if (audio.effectiveMusicVolume <= 0) return
-  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-    return
-  }
-  try {
-    await playBackgroundMusic()
-  } catch {
-    /* автовоспроизведение может быть заблокировано до жеста */
-  }
-}
+/** Источник блокировки аудио на время показа рекламы. */
+const ADV_AUDIO_LOCK = 'adv'
 
 /**
  * Реклама: только официальный SDK Яндекс.Игр (п. 4.1, 4.6 — без сторонних блоков и кастомного RTB).
@@ -59,29 +41,47 @@ function isCloudDataUnchangedError(err) {
     t.includes('без изменен')
   )
 }
-/** Таймаут `YaGames.init()` (сеть / оболочка). */
-const YAGAMES_INIT_TIMEOUT_MS = 20000
 /**
  * Лимиты SDK: `getPlayer` — не чаще 20 раз за 5 мин; `getData`/`setData` — 100 за 5 мин (см. доку «Данные игрока»).
  * `getData` без ответа не должен блокировать `LoadingAPI.ready` — обрываем ожидание.
  */
 const LOAD_PROGRESS_GET_DATA_TIMEOUT_MS = 15000
+/** То же — для `getStats` (отдельное API «Числовые данные»). */
+const LOAD_STATS_TIMEOUT_MS = 15000
 
 /**
- * Локально (`npm run dev`) без iframe Яндекс.Игр нет `ysdk.adv.showRewardedVideo` —
- * симулируем успешный просмотр, чтобы проверять награду (4-й аватар и т.д.).
- * Отключить заглушку: в `.env.local` задать `VITE_YANDEX_ADV_STUB=0`.
+ * Привести любое сохранение к простому JSON-совместимому объекту:
+ * Date/Function/Map/Set отбросит, refs из Vue сериализует значениями.
  */
-function shouldUseRewardedVideoDevStub() {
-  return import.meta.env.DEV && import.meta.env.VITE_YANDEX_ADV_STUB !== '0'
+function toPlainJson(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+/**
+ * `setStats` / `incrementStats` принимают только конечные числа.
+ * Возвращает `null`, если ни одно значение не валидно.
+ * @param {Record<string, unknown> | null | undefined} input
+ */
+function sanitizeStatsPayload(input) {
+  if (!input || typeof input !== 'object') return null
+  const out = {}
+  let touched = false
+  for (const k of Object.keys(input)) {
+    const v = Number(input[k])
+    if (Number.isFinite(v)) {
+      out[k] = v
+      touched = true
+    }
+  }
+  return touched ? out : null
 }
 
 export const useYandexGamesStore = defineStore('yandexGames', {
   state: () => ({
     ready: false,
-    /** Экземпляр после `YaGames.init()` (типы SDK в проекте не подключены). */
+    /** @type {import('ysdk').SDK | null} — как в доке: `await YaGames.init()` */
     ysdk: null,
-    /** Экземпляр `Player` для getData/setData. */
+    /** @type {import('ysdk').Player | null} — как в доке: `await ysdk.getPlayer()` */
     player: null,
     lang: DEFAULT_LANG,
     tld: '',
@@ -109,33 +109,20 @@ export const useYandexGamesStore = defineStore('yandexGames', {
       }
       document.documentElement.lang = this.lang
     },
+    /**
+     * Док: `<script src="/sdk.js">` подключается в index.html, далее один вызов
+     * `await YaGames.init()` (см. https://yandex.ru/dev/games/doc/ru/sdk/sdk-about).
+     * Любая ошибка не должна блокировать игру — переходим в офлайн-режим.
+     */
     async initSdk() {
-      if (this.ready) {
-        return
-      }
+      if (this.ready) return
       if (this._initSdkPromise) {
         await this._initSdkPromise
         return
       }
       this._initSdkPromise = (async () => {
         try {
-          await loadYandexGamesSdk()
-          if (typeof YaGames === 'undefined') {
-            throw new Error('YaGames не определён после загрузки скрипта')
-          }
-          const ysdk = await Promise.race([
-            YaGames.init(),
-            new Promise((_, reject) => {
-              setTimeout(() => {
-                reject(
-                  new Error(
-                    `YaGames.init: таймаут ${YAGAMES_INIT_TIMEOUT_MS} мс`,
-                  ),
-                )
-              }, YAGAMES_INIT_TIMEOUT_MS)
-            }),
-          ])
-          this.ysdk = ysdk
+          this.ysdk = await initYandexGamesSdk()
           this.applyPlayerLocaleFromYsdk()
         } catch (err) {
           this.initError = err instanceof Error ? err : new Error(String(err))
@@ -255,7 +242,7 @@ export const useYandexGamesStore = defineStore('yandexGames', {
       if (!player || typeof player.setData !== 'function') {
         return false
       }
-      const plain = JSON.parse(JSON.stringify(progress))
+      const plain = toPlainJson(progress)
       const payload = { [PROGRESS_DATA_KEY]: plain }
       try {
         await player.setData(payload, true)
@@ -294,6 +281,106 @@ export const useYandexGamesStore = defineStore('yandexGames', {
       }
     },
     /**
+     * Числовые игровые данные (только Real). Доступен только в Yandex Games SDK
+     * (`player.getStats` / `player.setStats` / `player.incrementStats`).
+     * Возвращает `null`, если SDK / player не готовы.
+     * @param {string[] | undefined} keys — список ключей (опционально).
+     * @returns {Promise<Record<string, number> | null>}
+     */
+    async loadStats(keys) {
+      const player = await this.ensurePlayer()
+      if (!player || typeof player.getStats !== 'function') return null
+      try {
+        const data = await Promise.race([
+          Array.isArray(keys) && keys.length > 0
+            ? player.getStats(keys)
+            : player.getStats(),
+          new Promise((_, reject) => {
+            setTimeout(() => {
+              reject(
+                new Error(
+                  `player.getStats: таймаут ${LOAD_STATS_TIMEOUT_MS} мс`,
+                ),
+              )
+            }, LOAD_STATS_TIMEOUT_MS)
+          }),
+        ])
+        return data && typeof data === 'object' ? data : null
+      } catch (err) {
+        this.storageError = err instanceof Error ? err : new Error(String(err))
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[Avia][yandex] loadStats', err)
+        }
+        return null
+      }
+    },
+    /**
+     * Сохранить набор числовых данных целиком. Возвращает `true` при успехе или
+     * если SDK недоступен (отсутствие записи не должно блокировать игру).
+     * @param {Record<string, number>} stats
+     */
+    async saveStats(stats) {
+      const player = await this.ensurePlayer()
+      if (!player || typeof player.setStats !== 'function') return false
+      const payload = sanitizeStatsPayload(stats)
+      if (!payload) return true
+      try {
+        await player.setStats(payload)
+        return true
+      } catch (err) {
+        if (isCloudDataUnchangedError(err)) return true
+        this.storageError = err instanceof Error ? err : new Error(String(err))
+        return false
+      }
+    },
+    /**
+     * Атомарный инкремент числовых данных. Используется для частых счётчиков —
+     * см. доку «Числовые данные» (отдельные лимиты от `setData`).
+     * @param {Record<string, number>} deltas
+     */
+    async incrementStatsRemote(deltas) {
+      const player = await this.ensurePlayer()
+      if (!player || typeof player.incrementStats !== 'function') return false
+      const payload = sanitizeStatsPayload(deltas)
+      if (!payload) return true
+      try {
+        await player.incrementStats(payload)
+        return true
+      } catch (err) {
+        this.storageError = err instanceof Error ? err : new Error(String(err))
+        return false
+      }
+    },
+    /**
+     * Серверные feature-flags. Возвращает поверх defaults: значения с сервера
+     * имеют приоритет, но всегда строки — приведение типов делает вызывающий
+     * (например, `Number(...)` / `value === 'true'`).
+     * @param {Record<string, string>} [defaultFlags]
+     * @returns {Promise<Record<string, string>>}
+     */
+    async loadFlags(defaultFlags) {
+      const defaults =
+        defaultFlags && typeof defaultFlags === 'object' ? { ...defaultFlags } : {}
+      const ysdk = this.ysdk
+      if (!ysdk || typeof ysdk.getFlags !== 'function') return defaults
+      try {
+        const flags = await ysdk.getFlags(
+          Object.keys(defaults).length
+            ? { defaultFlags: defaults }
+            : undefined,
+        )
+        if (flags && typeof flags === 'object') {
+          return { ...defaults, ...flags }
+        }
+        return defaults
+      } catch (err) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[Avia][yandex] loadFlags', err)
+        }
+        return defaults
+      }
+    },
+    /**
      * Полноэкранная реклама (логические паузы, п. 4.4). П. 4.7: пауза звука на время показа.
      * @param {{ resumeAudioAfterClose?: boolean }} [opts] — если `false`, звук не возобновляем (выход в меню).
      * @returns {Promise<{ wasShown: boolean, unavailable?: boolean, error?: boolean }>}
@@ -312,28 +399,22 @@ export const useYandexGamesStore = defineStore('yandexGames', {
         const finish = (payload) => {
           if (settled) return
           settled = true
-          const done = async () => {
-            if (resumeAudio) {
-              await resumeSharedAudioAfterYandexAdv()
-            }
-            resolve(payload)
+          if (resumeAudio) {
+            releaseAudioFocusLock(ADV_AUDIO_LOCK)
           }
-          void done()
+          resolve(payload)
         }
-        const run = async () => {
-          await suspendSharedAudioForYandexAdv()
-          try {
-            adv.showFullscreenAdv({
-              callbacks: {
-                onClose: (wasShown) => finish({ wasShown: !!wasShown }),
-                onError: () => finish({ wasShown: false, error: true }),
-              },
-            })
-          } catch {
-            finish({ wasShown: false, error: true })
-          }
+        acquireAudioFocusLock(ADV_AUDIO_LOCK)
+        try {
+          adv.showFullscreenAdv({
+            callbacks: {
+              onClose: (wasShown) => finish({ wasShown: !!wasShown }),
+              onError: () => finish({ wasShown: false, error: true }),
+            },
+          })
+        } catch {
+          finish({ wasShown: false, error: true })
         }
-        void run()
       })
     },
     /**
@@ -343,84 +424,51 @@ export const useYandexGamesStore = defineStore('yandexGames', {
      * Соответствует веб-SDK Яндекс.Игр (`onOpen` / `onRewarded` / `onClose` / `onError`), не Unity.
      *
      * @param {{ resumeAudioAfterClose?: boolean }} [opts]
-     * @returns {Promise<{ rewarded: boolean, wasShown: boolean, unavailable?: boolean, error?: boolean, devStub?: boolean }>}
+     * @returns {Promise<{ rewarded: boolean, wasShown: boolean, unavailable?: boolean, error?: boolean }>}
      */
     showRewardedVideo(opts = {}) {
-      const resumeAudio =
-        opts.resumeAudioAfterClose === undefined
-          ? true
-          : opts.resumeAudioAfterClose
       const adv = this.ysdk?.adv
       if (!adv || typeof adv.showRewardedVideo !== 'function') {
-        if (shouldUseRewardedVideoDevStub()) {
-          return this.devStubRewardedVideo(opts)
-        }
         return Promise.resolve({
           rewarded: false,
           wasShown: false,
           unavailable: true,
         })
       }
+      const resumeAudio =
+        opts.resumeAudioAfterClose === undefined
+          ? true
+          : opts.resumeAudioAfterClose
       return new Promise((resolve) => {
         let rewarded = false
         let settled = false
         const finish = (wasShown) => {
           if (settled) return
           settled = true
-          const done = async () => {
-            if (resumeAudio) {
-              await resumeSharedAudioAfterYandexAdv()
-            }
-            resolve({ rewarded, wasShown: !!wasShown })
+          if (resumeAudio) {
+            releaseAudioFocusLock(ADV_AUDIO_LOCK)
           }
-          void done()
+          resolve({ rewarded, wasShown: !!wasShown })
         }
-        const run = async () => {
-          await suspendSharedAudioForYandexAdv()
-          try {
-            adv.showRewardedVideo({
-              callbacks: {
-                onOpen: () => {
-                  /* реклама отображена на экране — звук уже приглушён выше */
-                },
-                onRewarded: () => {
-                  /* засчитан просмотр; награду выдаём после await showRewardedVideo по флагу rewarded */
-                  rewarded = true
-                },
-                onClose: (wasShown) => finish(wasShown),
-                onError: () => finish(false),
+        acquireAudioFocusLock(ADV_AUDIO_LOCK)
+        try {
+          adv.showRewardedVideo({
+            callbacks: {
+              onOpen: () => {
+                /* реклама отображена на экране — звук уже приглушён через audioFocus */
               },
-            })
-          } catch {
-            finish(false)
-          }
+              onRewarded: () => {
+                /* засчитан просмотр; награду выдаём после await showRewardedVideo по флагу rewarded */
+                rewarded = true
+              },
+              onClose: (wasShown) => finish(wasShown),
+              onError: () => finish(false),
+            },
+          })
+        } catch {
+          finish(false)
         }
-        void run()
       })
-    },
-    /**
-     * Только development: имитация rewarded без платформы (см. `shouldUseRewardedVideoDevStub`).
-     */
-    async devStubRewardedVideo(opts = {}) {
-      const resumeAudio =
-        opts.resumeAudioAfterClose === undefined
-          ? true
-          : opts.resumeAudioAfterClose
-      await suspendSharedAudioForYandexAdv()
-      await new Promise((r) => setTimeout(r, 400))
-      if (resumeAudio) {
-        await resumeSharedAudioAfterYandexAdv()
-      }
-      if (typeof console !== 'undefined' && typeof console.info === 'function') {
-        console.info(
-          '[YandexGames] dev stub: rewarded — как будто реклама просмотрена (вне iframe adv нет)',
-        )
-      }
-      return {
-        rewarded: true,
-        wasShown: true,
-        devStub: true,
-      }
     },
     /** Sticky-баннер: только если в консоли включено «Использовать API для показа». */
     async showStickyBannerAdv() {

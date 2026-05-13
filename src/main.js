@@ -1,20 +1,26 @@
 import { createApp } from 'vue'
-import { createPinia } from 'pinia'
+import { createPinia, setActivePinia } from 'pinia'
 import { addCollection } from '@iconify/vue'
 import mdiSubset from '@/iconify/mdiSubset.json'
 import 'swiper/css'
-import App from './App.vue'
 import router from './router'
-import { useYandexGamesStore } from '@/stores/yandexGames'
+import { ensureYandexGamesDevShim } from '@/yandex/yandexGamesDevShim.js'
 
 /** Локальный поднабор MDI: без CDN (в iframe Яндекс.Игр api.iconify.design часто недоступен). */
 addCollection(mdiSubset)
 
+/**
+ * На localhost вне iframe Яндекса CDN-sdk не выставляет `YaGames` —
+ * подменяем его до старта Vue, чтобы `YaGames.init()` работал прямо как в доке.
+ * В iframe Яндекс.Игр и в production шим — no-op.
+ */
+ensureYandexGamesDevShim()
+
 async function main() {
   const pinia = createPinia()
-  const yandexGames = useYandexGamesStore(pinia)
-  await yandexGames.initSdk()
+  setActivePinia(pinia)
 
+  const { default: App } = await import('./App.vue')
   const app = createApp(App)
   app.use(pinia)
   app.use(router)

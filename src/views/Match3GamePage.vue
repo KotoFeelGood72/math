@@ -292,6 +292,8 @@
         </button>
       </div>
 
+      <RewardPopup ref="rewardPopupRef" />
+
       <Teleport to="body">
         <div
           v-if="flyCoins.length > 0"
@@ -469,6 +471,7 @@ import { useRoute, useRouter } from 'vue-router'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import Match3Board from '@/components/match3/Match3Board.vue'
 import MenuActionButton from '@/components/MenuActionButton.vue'
+import RewardPopup from '@/components/RewardPopup.vue'
 import { Icon } from '@iconify/vue'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
@@ -893,6 +896,23 @@ const boostBarDisabled = computed(
 /** Ходы за просмотр rewarded (Яндекс.Игры). */
 const REWARD_MOVES_FROM_AD = 5
 
+/** Центровой попап «получена награда» с конфетти; скрывается через 500мс. */
+const rewardPopupRef = ref(null)
+
+function showRewardForMoves(amount) {
+  rewardPopupRef.value?.show({
+    title: `+${amount} ходов`,
+    icon: 'mdi:foot-print',
+  })
+}
+
+function showRewardForBooster(kind) {
+  rewardPopupRef.value?.show({
+    title: `+1 ${BOOSTER_DISPLAY_NAME[kind] || 'бустер'}`,
+    imageUrl: getBoosterIconUrl(kind),
+  })
+}
+
 const lossModalVisible = ref(false)
 const lossAdBusy = ref(false)
 const noMovesActionBusy = ref(false)
@@ -946,12 +966,16 @@ function openPause() {
   if (status.value !== 'playing') return
   paused.value = true
   pauseBackgroundMusic()
+  /* Док Я.Игр: GameplayAPI.stop() — сигнал «логическая пауза».
+     После этого площадке разрешено показать ad/уведомления. */
+  yandexGames.notifyGameplayStop()
 }
 
 function closePause() {
   if (!paused.value) return
   paused.value = false
   resumeBgmFromUserGesture()
+  yandexGames.notifyGameplayStart()
 }
 
 async function exitFromPauseToMenu() {
@@ -1239,6 +1263,7 @@ async function watchAdContinueAfterLoss() {
       yandexGames.notifyGameplayStart()
       resumeBgmFromUserGesture()
       bumpUserActivity()
+      showRewardForMoves(REWARD_MOVES_FROM_AD)
     }
   } finally {
     lossAdBusy.value = false
@@ -1264,6 +1289,7 @@ async function watchRewardedForBooster(
     if (res.rewarded) {
       game.grantBoosterFromRewardAd(kind)
       bumpUserActivity()
+      showRewardForBooster(kind)
     }
   } finally {
     rewardAdBusy.value = false
@@ -1313,6 +1339,7 @@ async function watchRewardedForMoves() {
     if (res.rewarded) {
       game.grantBonusMoves(REWARD_MOVES_FROM_AD)
       bumpUserActivity()
+      showRewardForMoves(REWARD_MOVES_FROM_AD)
     }
   } finally {
     rewardAdBusy.value = false
@@ -1361,6 +1388,7 @@ async function watchNoMovesRewardedAd() {
       yandexGames.notifyGameplayStart()
       resumeBgmFromUserGesture()
       bumpUserActivity()
+      showRewardForMoves(REWARD_MOVES_FROM_AD)
     }
   } finally {
     noMovesAdBusy.value = false

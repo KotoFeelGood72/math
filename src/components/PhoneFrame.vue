@@ -1,11 +1,33 @@
 <script setup>
+import sticker1 from '@/assets/images/sticker/1.png'
+import sticker2 from '@/assets/images/sticker/2.png'
+import sticker3 from '@/assets/images/sticker/3.png'
+import sticker4 from '@/assets/images/sticker/4.png'
+
 defineProps({
   /** false — фон без горизонтального движения (экран уровня match-3). */
   parallax: {
     type: Boolean,
     default: true,
   },
+  /** Включать декоративные стикеры, «выглядывающие» по бокам внутри экрана. */
+  stickers: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+/**
+ * Декоративные стикеры внутри экрана телефона: половина стикера уходит за
+ * левый/правый край и обрезается `overflow: hidden` экрана — создаётся
+ * эффект «выглядывания» из-за рамки.
+ */
+const SIDE_STICKERS = [
+  { src: sticker1, side: 'left', y: '6%', rot: '-14deg', size: 8 },
+  { src: sticker3, side: 'left', y: '60%', rot: '8deg', size: 7.5 },
+  { src: sticker2, side: 'right', y: '12%', rot: '12deg', size: 7.5 },
+  { src: sticker4, side: 'right', y: '66%', rot: '-10deg', size: 8 },
+]
 </script>
 
 <template>
@@ -17,6 +39,24 @@ defineProps({
       <div class="phone-rc__screen">
         <div class="phone-rc__parallax phone-rc__parallax--inner" aria-hidden="true">
           <div class="phone-rc__parallax-strip phone-rc__parallax-strip--fast" />
+        </div>
+        <div v-if="stickers" class="phone-rc__side-stickers" aria-hidden="true">
+          <img
+            v-for="(s, i) in SIDE_STICKERS"
+            :key="i"
+            :src="s.src"
+            :class="[
+              'phone-rc__side-sticker',
+              `phone-rc__side-sticker--${s.side}`,
+            ]"
+            :style="{
+              top: s.y,
+              '--rot': s.rot,
+              '--size': `${s.size}rem`,
+            }"
+            alt=""
+            draggable="false"
+          />
         </div>
         <div class="phone-rc__content">
           <slot />
@@ -97,6 +137,37 @@ defineProps({
   .phone-rc:not(.phone-rc--static-bg) .phone-rc__parallax-strip--fast {
     animation: none;
   }
+}
+
+/* Стикеры внутри экрана: половина каждого уходит за левый/правый край
+   и обрезается `overflow: hidden` у `.phone-rc__screen` — эффект
+   «выглядывания» из-за рамки телефона. */
+.phone-rc__side-stickers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Выше фонового parallax (z-index: 0), ниже контента (z-index: 1). */
+  z-index: 0;
+}
+
+.phone-rc__side-sticker {
+  position: absolute;
+  width: var(--size, 7.5rem);
+  height: var(--size, 7.5rem);
+  filter: drop-shadow(0 8px 14px rgba(40, 20, 5, 0.45));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.phone-rc__side-sticker--left {
+  left: 0;
+  /* -35% по X — за краем остаётся ~треть, остальное выглядывает. */
+  transform: translateX(-35%) rotate(var(--rot, 0deg));
+}
+
+.phone-rc__side-sticker--right {
+  right: 0;
+  transform: translateX(35%) rotate(var(--rot, 0deg));
 }
 
 .phone-rc__phone {

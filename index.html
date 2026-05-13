@@ -8,8 +8,12 @@
       content="width=device-width,initial-scale=1.0,viewport-fit=cover"
     />
     <meta name="mobile-web-app-capable" content="yes" />
-    <!-- Yandex Games SDK — до бандла; тег обязателен для требований Яндекса -->
-    <script async src="./sdk.js"></script>
+    <!--
+      Yandex Games SDK — точно как в доке: один синхронный тег до бандла.
+      https://yandex.ru/dev/games/doc/ru/sdk/sdk-about
+      Без async/defer: к моменту запуска main.js глобал `YaGames` уже доступен.
+    -->
+    <script src="/sdk.js"></script>
     <link rel="stylesheet" href="./fonts/local-fonts.css" />
     <link rel="icon" href="./favicon.ico" />
     <title>Match-3</title>

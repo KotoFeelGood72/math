@@ -75,10 +75,13 @@ import { useAudioSettingsStore } from '@/stores/audioSettings'
 import {
   initBackgroundMusic,
   pauseBackgroundMusic,
-  playBackgroundMusic,
-  resumeBackgroundMusicFromUserGesture,
   setBackgroundMusicVolume,
 } from '@/audio/backgroundMusic.js'
+import {
+  notifyMusicVolumeChanged,
+  startAudioFocus,
+  stopAudioFocus,
+} from '@/audio/audioFocus.js'
 import bgmUrl from '@/assets/music.mp3'
 
 const bootLoaderPcUrl = `${import.meta.env.BASE_URL}pc-loader.png`
@@ -157,17 +160,23 @@ function stopBootProgressLoop() {
 bootProgressRaf = requestAnimationFrame(tickBootProgress)
 startBootTipRotation()
 let progressSaveTimer = 0
+let statsSaveTimer = 0
 /** Дебаунс перед player.setData (лимит SDK: 100 / 5 мин). */
 const SAVE_DEBOUNCE_MS = 1200
+/** Дебаунс перед player.setStats (отдельные лимиты, но без агрессии). */
+const STATS_SAVE_DEBOUNCE_MS = 1500
 
 /** Локальный дубль облака — если getData пустой (офлайн / первый кадр). */
 const LOCAL_PROGRESS_BACKUP_KEY = 'match3_yandex_backup_v1'
 
 const route = useRoute()
-/** Полоса загрузки только на стартовом экране (главное меню), не поверх уровня. */
-const showBootProgressUi = computed(
-  () => !bootReady.value && route.name === 'menu',
-)
+/**
+ * Прелоадер виден весь холодный старт: SDK Я.Игр, загрузка облачных данных
+ * и минимальное время показа (BOOT_SCREEN_MIN_MS). Без привязки к маршруту,
+ * иначе при deeplink на `/play/N` или до разрешения начального маршрута
+ * пользователь увидит «голый» экран с пустыми данными.
+ */
+const showBootProgressUi = computed(() => !bootReady.value)
 const yandexGames = useYandexGamesStore()
 const flow = useGameFlowStore()
 const progress = useMatch3ProgressStore()
@@ -175,7 +184,7 @@ const stats = useMatch3StatsStore()
 const game = useMatch3GameStore()
 const audioSettings = useAudioSettingsStore()
 
-const { lastSavedSnapshotKey } = storeToRefs(flow)
+const { lastSavedSnapshotKey, lastSavedStatsKey } = storeToRefs(flow)
 
 watch(
   () => 'Match-3',
@@ -226,49 +235,13 @@ function blockViewportTouchScroll(e) {
 
 let detachAppRootUiGuards = () => {}
 let detachViewportTouchGuards = () => {}
-let detachBgmVisibility = () => {}
-let detachBgmUnlock = () => {}
 
-function tryPlayBgmAfterUnlock() {
-  if (audioSettings.effectiveMusicVolume <= 0) return
-  resumeBackgroundMusicFromUserGesture()
-}
-
-function attachBgmUnlockOnFirstGesture() {
-  detachBgmUnlock()
-  const once = () => {
-    tryPlayBgmAfterUnlock()
-    detachBgmUnlock()
-  }
-  detachBgmUnlock = () => {
-    document.removeEventListener('pointerdown', once)
-    document.removeEventListener('click', once)
-    document.removeEventListener('keydown', once)
-    detachBgmUnlock = () => {}
-  }
-  document.addEventListener('pointerdown', once, { passive: true })
-  document.addEventListener('click', once, { passive: true })
-  document.addEventListener('keydown', once)
-}
-
-function onBgmVisibility() {
-  if (document.visibilityState === 'hidden') {
-    pauseBackgroundMusic()
-    return
-  }
-  if (audioSettings.effectiveMusicVolume <= 0) return
-  void playBackgroundMusic().catch(() => attachBgmUnlockOnFirstGesture())
-}
-
-async function startBackgroundMusicIfNeeded() {
+function startBackgroundMusicIfNeeded() {
   initBackgroundMusic(bgmUrl)
   setBackgroundMusicVolume(audioSettings.effectiveMusicVolume)
-  if (audioSettings.effectiveMusicVolume <= 0) return
-  try {
-    await playBackgroundMusic()
-  } catch {
-    attachBgmUnlockOnFirstGesture()
-  }
+  startAudioFocus({
+    getMusicVolume: () => audioSettings.effectiveMusicVolume,
+  })
 }
 
 function getSnapshotKey(snapshot) {
@@ -279,11 +252,20 @@ function getSnapshotKey(snapshot) {
   }
 }
 
+/**
+ * В blob через `setData` пишем только основной игровой прогресс.
+ * Числовые счётчики (`stats`) идут отдельным потоком через `setStats`
+ * (см. `flushStatsToCloud`) — это разделение «data / stats» из доки Я.Игр.
+ *
+ * `savedAt` добавляется ИМЕННО при отправке (см. flushProgressToCloud), а не
+ * сюда, чтобы фингерпринт не менялся каждый тик и не триггерил лишних save.
+ */
 function buildCloudSnapshot() {
-  return {
-    progress: progress.getSnapshot(),
-    stats: stats.getSnapshot(),
-  }
+  return { progress: progress.getSnapshot() }
+}
+
+function buildStatsSnapshot() {
+  return stats.getSnapshot()
 }
 
 function readLocalProgressBackup() {
@@ -297,37 +279,76 @@ function readLocalProgressBackup() {
   }
 }
 
-function writeLocalProgressBackup(snap) {
+function writeLocalProgressBackup() {
   try {
+    const snap = {
+      progress: progress.getSnapshot(),
+      stats: stats.getSnapshot(),
+      savedAt: Date.now(),
+    }
     localStorage.setItem(LOCAL_PROGRESS_BACKUP_KEY, JSON.stringify(snap))
   } catch {
     /* квота / приватный режим */
   }
 }
 
-function applyCloudSnapshot(snap) {
-  if (!snap || typeof snap !== 'object') return
-  if (snap.progress) progress.restoreSnapshot(snap.progress)
-  if (snap.stats) stats.restoreSnapshot(snap.stats)
+/**
+ * Применяет сохранение к сторам.
+ * `progress` берётся из blob; `stats` — из отдельного источника, если он есть,
+ * иначе fallback к `stats` внутри blob (миграция старых сейвов).
+ */
+function applyCloudSnapshot({ blob, statsFromCloud }) {
+  if (blob && typeof blob === 'object' && blob.progress) {
+    progress.restoreSnapshot(blob.progress)
+  }
+  if (statsFromCloud && typeof statsFromCloud === 'object'
+      && Object.keys(statsFromCloud).length > 0) {
+    stats.restoreSnapshot(statsFromCloud)
+  } else if (blob && blob.stats) {
+    stats.restoreSnapshot(blob.stats)
+  }
 }
 
 /* Фон сразу при запуске приложения, не после SDK и не с экрана уровня. */
-void startBackgroundMusicIfNeeded()
+startBackgroundMusicIfNeeded()
+
+/**
+ * Из двух источников (облако и локальный backup) берём более свежий по `savedAt`.
+ * Backup пишется синхронно при каждом изменении state, облако — асинхронно
+ * через debounce: если игрок успел купить бустер и закрыть страницу до того,
+ * как `setData` дошёл до сервера, локальная копия будет новее облачной.
+ */
+function pickFreshestSavedSource(blob, backup) {
+  const cloudAt = Number(blob?.savedAt) || 0
+  const localAt = Number(backup?.savedAt) || 0
+  if (backup && localAt > cloudAt) return { source: backup, fromBackup: true }
+  if (blob) return { source: blob, fromBackup: false }
+  if (backup) return { source: backup, fromBackup: true }
+  return { source: null, fromBackup: false }
+}
 
 void (async () => {
   try {
     await yandexGames.initSdk()
     await yandexGames.ensurePlayer()
-    let saved = await yandexGames.loadProgress()
-    if (!saved) {
-      saved = readLocalProgressBackup()
-      if (saved) applyCloudSnapshot(saved)
-    } else {
-      applyCloudSnapshot(saved)
+    const [blob, statsFromCloud] = await Promise.all([
+      yandexGames.loadProgress(),
+      yandexGames.loadStats(),
+    ])
+    const backup = readLocalProgressBackup()
+    const { source, fromBackup } = pickFreshestSavedSource(blob, backup)
+    if (source) {
+      applyCloudSnapshot({
+        blob: source,
+        /* Если локальный backup свежее облака — числовые stats берём из него,
+           иначе предпочитаем отдельный getStats (он первичный для stats). */
+        statsFromCloud: fromBackup ? source.stats : statsFromCloud,
+      })
     }
-    const snap = buildCloudSnapshot()
-    const k = getSnapshotKey(snap)
-    if (k) lastSavedSnapshotKey.value = k
+    const snapKey = getSnapshotKey(buildCloudSnapshot())
+    if (snapKey) lastSavedSnapshotKey.value = snapKey
+    const statsKey = getSnapshotKey(buildStatsSnapshot())
+    if (statsKey) lastSavedStatsKey.value = statsKey
     await nextTick()
     yandexGames.applyPlayerLocaleFromYsdk()
     await yandexGames.notifyLoadingReady()
@@ -336,11 +357,13 @@ void (async () => {
       console.error('[Match3][App] bootstrap', e)
     }
     try {
-      const b = readLocalProgressBackup()
-      if (b) {
-        applyCloudSnapshot(b)
-        const k = getSnapshotKey(buildCloudSnapshot())
-        if (k) lastSavedSnapshotKey.value = k
+      const backup = readLocalProgressBackup()
+      if (backup) {
+        applyCloudSnapshot({ blob: backup, statsFromCloud: backup.stats })
+        const snapKey = getSnapshotKey(buildCloudSnapshot())
+        if (snapKey) lastSavedSnapshotKey.value = snapKey
+        const statsKey = getSnapshotKey(buildStatsSnapshot())
+        if (statsKey) lastSavedStatsKey.value = statsKey
       }
     } catch {
       /* ignore */
@@ -351,7 +374,7 @@ void (async () => {
 })()
 
 onMounted(() => {
-  void startBackgroundMusicIfNeeded()
+  startBackgroundMusicIfNeeded()
   const root = appRootEl.value
   if (root) {
     root.addEventListener('contextmenu', blockNativeSelectionAndContextMenu)
@@ -375,11 +398,6 @@ onMounted(() => {
 
   window.addEventListener('pagehide', flushOnLifecycle)
   document.addEventListener('visibilitychange', onPageLifecycleSave)
-  document.addEventListener('visibilitychange', onBgmVisibility)
-  detachBgmVisibility = () => {
-    document.removeEventListener('visibilitychange', onBgmVisibility)
-    detachBgmVisibility = () => {}
-  }
 })
 
 onBeforeUnmount(() => {
@@ -387,13 +405,13 @@ onBeforeUnmount(() => {
   stopBootTipRotation()
   detachAppRootUiGuards()
   detachViewportTouchGuards()
-  void flushProgressToCloud()
+  void flushAllToCloud()
   window.removeEventListener('pagehide', flushOnLifecycle)
   document.removeEventListener('visibilitychange', onPageLifecycleSave)
-  detachBgmVisibility()
-  detachBgmUnlock()
+  stopAudioFocus()
   pauseBackgroundMusic()
   if (progressSaveTimer) clearTimeout(progressSaveTimer)
+  if (statsSaveTimer) clearTimeout(statsSaveTimer)
 })
 
 async function flushProgressToCloud() {
@@ -405,10 +423,14 @@ async function flushProgressToCloud() {
     const snapshot = buildCloudSnapshot()
     const snapshotKey = getSnapshotKey(snapshot)
     if (snapshotKey && snapshotKey === lastSavedSnapshotKey.value) return
-    const saved = await yandexGames.saveProgress(snapshot)
+    /* savedAt НЕ входит в fingerprint, чтобы не было лишних save'ов из-за смены времени,
+       но кладётся в облако: при загрузке поможет выбрать более свежий источник. */
+    const saved = await yandexGames.saveProgress({
+      ...snapshot,
+      savedAt: Date.now(),
+    })
     if (saved && snapshotKey) {
       lastSavedSnapshotKey.value = snapshotKey
-      writeLocalProgressBackup(snapshot)
     }
   } catch (e) {
     if (typeof console !== 'undefined' && typeof console.warn === 'function') {
@@ -417,8 +439,33 @@ async function flushProgressToCloud() {
   }
 }
 
-function flushOnLifecycle() {
+async function flushStatsToCloud() {
+  if (statsSaveTimer) {
+    clearTimeout(statsSaveTimer)
+    statsSaveTimer = 0
+  }
+  try {
+    const snapshot = buildStatsSnapshot()
+    const statsKey = getSnapshotKey(snapshot)
+    if (statsKey && statsKey === lastSavedStatsKey.value) return
+    const saved = await yandexGames.saveStats(snapshot)
+    if (saved && statsKey) {
+      lastSavedStatsKey.value = statsKey
+    }
+  } catch (e) {
+    if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      console.warn('[Match3] cloud stats save skipped', e)
+    }
+  }
+}
+
+function flushAllToCloud() {
   void flushProgressToCloud()
+  void flushStatsToCloud()
+}
+
+function flushOnLifecycle() {
+  flushAllToCloud()
 }
 
 function scheduleProgressSave() {
@@ -428,19 +475,39 @@ function scheduleProgressSave() {
   }, SAVE_DEBOUNCE_MS)
 }
 
+function scheduleStatsSave() {
+  if (statsSaveTimer) clearTimeout(statsSaveTimer)
+  statsSaveTimer = window.setTimeout(() => {
+    void flushStatsToCloud()
+  }, STATS_SAVE_DEBOUNCE_MS)
+}
+
 const cloudSaveFingerprint = computed(() =>
   getSnapshotKey(buildCloudSnapshot()),
 )
 
+const statsSaveFingerprint = computed(() =>
+  getSnapshotKey(buildStatsSnapshot()),
+)
+
 watch(cloudSaveFingerprint, () => {
   if (!bootBootstrapDone.value) return
+  /* Сначала синхронно — localStorage, чтобы данные не пропали при немедленной
+     перезагрузке (асинхронный setData в облако может не успеть). */
+  writeLocalProgressBackup()
   scheduleProgressSave()
+})
+
+watch(statsSaveFingerprint, () => {
+  if (!bootBootstrapDone.value) return
+  writeLocalProgressBackup()
+  scheduleStatsSave()
 })
 
 watch(
   () => route.fullPath,
   () => {
-    void flushProgressToCloud()
+    flushAllToCloud()
   },
 )
 
@@ -448,13 +515,7 @@ watch(
   () => audioSettings.effectiveMusicVolume,
   (v) => {
     setBackgroundMusicVolume(v)
-    if (v <= 0) {
-      pauseBackgroundMusic()
-      return
-    }
-    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-      void playBackgroundMusic().catch(() => attachBgmUnlockOnFirstGesture())
-    }
+    notifyMusicVolumeChanged()
   },
 )
 
@@ -465,7 +526,7 @@ const inGameFlow = computed(
 function onPageLifecycleSave() {
   if (document.visibilityState === 'hidden') {
     yandexGames.notifyGameplayStop()
-    void flushProgressToCloud()
+    flushAllToCloud()
     return
   }
   if (inGameFlow.value) {

@@ -86,17 +86,19 @@
 <script setup>
 defineOptions({ name: 'LevelResultPage' })
 
-import { computed, watch, nextTick } from 'vue'
+import { computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import confetti from '@hiseb/confetti'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import { Icon } from '@iconify/vue'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
+import { useYandexGamesStore } from '@/stores/yandexGames'
 
 const route = useRoute()
 const router = useRouter()
 const progress = useMatch3ProgressStore()
+const yandexGames = useYandexGamesStore()
 const { totalLevels } = storeToRefs(progress)
 
 const level = computed(() => parseInt(route.query.level, 10) || 1)
@@ -138,6 +140,24 @@ watch(
   },
   { immediate: true },
 )
+
+/**
+ * Полноэкранная реклама после уровня — и при победе, и при проигрыше.
+ * Это логическая пауза (требование Я.Игр п. 4.4); звук и геймплей уже на
+ * паузе через audioFocus и `notifyGameplayStop` соответственно.
+ * Частоту (≥60 сек между показами, п. 4.6) контролирует сам SDK —
+ * если ещё рано, вызов будет no-op.
+ *
+ * Небольшая задержка, чтобы игрок успел увидеть свой результат и конфетти,
+ * а не сразу перекрывать экран рекламой.
+ */
+const INTERSTITIAL_DELAY_MS = 600
+
+onMounted(() => {
+  window.setTimeout(() => {
+    void yandexGames.showFullscreenAdv()
+  }, INTERSTITIAL_DELAY_MS)
+})
 
 function retry() {
   router.replace({ name: 'play', params: { id: level.value } })
