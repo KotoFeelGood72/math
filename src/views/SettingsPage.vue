@@ -217,20 +217,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  justify-content: space-between;
 }
 
 /* Шапка — как на экране уровня */
 .settings__top {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 0.35rem 0.45rem;
+  justify-content: space-between;
+  gap: 0.45rem;
   padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
 }
 
 .settings__back {
+  flex: 0 0 2.4rem;
   width: 2.4rem;
   height: 2.4rem;
+  flex-shrink: 0;
   border: 3px solid var(--m3-border-dark);
   border-radius: 12px;
   background: linear-gradient(180deg, var(--m3-go-1) 0%, var(--m3-go-2) 100%);
@@ -256,6 +259,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .settings__title {
+  flex: 1;
   margin: 0;
   text-align: center;
   font-size: 0.95rem;
@@ -273,7 +277,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .settings__top-spacer {
+  flex: 0 0 2.4rem;
   width: 2.4rem;
+  flex-shrink: 0;
 }
 
 /* Кремовая панель (глобальный класс m3-modal-panel) */
@@ -317,6 +323,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .settings__toggle-label {
+  flex: 1;
+  min-width: 0;
   font-size: 0.88rem;
   font-weight: 700;
   color: #4a2810;
@@ -373,6 +381,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 .settings__sound-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.55rem;
   padding: 0.55rem 0 0;
   margin-top: 0.15rem;

@@ -113,6 +113,7 @@ function goSettings() {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  justify-content: space-between;
 }
 
 .menu__topbar {

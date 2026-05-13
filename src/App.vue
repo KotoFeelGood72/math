@@ -3,27 +3,55 @@
     <div class="app-root__view">
       <router-view :key="route.fullPath" />
     </div>
-    <div
-      v-if="showBootProgressUi"
-      class="app-boot"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-    >
-      <div class="app-boot__blocker" aria-hidden="true" />
-      <div class="app-boot__bottom">
-        <div class="app-boot__bar-wrap">
-          <div class="app-boot__bar-track">
-            <div
-              class="app-boot__bar-fill"
-              :style="{ width: `${bootProgress}%` }"
+    <Transition name="app-boot-fade">
+      <div
+        v-if="showBootProgressUi"
+        class="app-boot"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div class="app-boot__blocker" aria-hidden="true" />
+        <div class="app-boot__art-wrap" aria-hidden="true">
+          <picture class="app-boot__picture">
+            <source
+              media="(max-width: 768px)"
+              :srcset="bootLoaderMobileUrl"
             />
-            <span class="app-boot__bar-label">{{ bootProgress }}%</span>
+            <img
+              class="app-boot__art"
+              :src="bootLoaderPcUrl"
+              alt=""
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
+        </div>
+        <div class="app-boot__foreground">
+          <div class="app-boot__logo-wrap">
+            <img
+              class="app-boot__logo"
+              :src="bootLogoUrl"
+              alt="Dessert Land"
+              decoding="async"
+              draggable="false"
+            />
+          </div>
+          <div class="app-boot__bottom">
+            <div class="app-boot__bar-wrap">
+              <div class="app-boot__bar-track">
+                <div
+                  class="app-boot__bar-fill"
+                  :style="{ width: `${bootProgress}%` }"
+                />
+                <span class="app-boot__bar-label">{{ bootProgress }}%</span>
+              </div>
+            </div>
+            <p class="app-boot__tip">{{ currentBootTip }}</p>
           </div>
         </div>
-        <p class="app-boot__tip">{{ currentBootTip }}</p>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 
@@ -52,6 +80,10 @@ import {
   setBackgroundMusicVolume,
 } from '@/audio/backgroundMusic.js'
 import bgmUrl from '@/assets/music.mp3'
+
+const bootLoaderPcUrl = `${import.meta.env.BASE_URL}pc-loader.png`
+const bootLoaderMobileUrl = `${import.meta.env.BASE_URL}mobile-loader.png`
+const bootLogoUrl = `${import.meta.env.BASE_URL}logo.png`
 
 const LOADING_TIPS = [
   'Совет: собирай больше комбинаций для супер бонусов!',
@@ -1071,32 +1103,120 @@ body {
   -webkit-touch-callout: none;
 }
 
+.app-boot-fade-leave-active {
+  transition: opacity 0.42s ease;
+}
+
+.app-boot-fade-leave-from {
+  opacity: 1;
+}
+
+.app-boot-fade-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-boot-fade-leave-active {
+    transition-duration: 0.1s;
+  }
+}
+
 .app-boot {
   position: fixed;
   inset: 0;
   z-index: 2147483000;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: stretch;
   min-height: 100dvh;
   min-height: 100svh;
-  padding: 0 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+  padding: 0;
   box-sizing: border-box;
   pointer-events: none;
+  /* Пока грузится картинка — не голый экран под меню */
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 50% 100%,
+      rgba(255, 255, 255, 0.35) 0%,
+      transparent 70%
+    ),
+    linear-gradient(
+      180deg,
+      var(--m3-bg-top) 0%,
+      var(--m3-bg-mid) 55%,
+      var(--m3-bg-deep) 100%
+    );
 }
 
 .app-boot__blocker {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   pointer-events: auto;
   background: transparent;
 }
 
+.app-boot__art-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-boot__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.app-boot__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.app-boot__foreground {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: max(0.75rem, env(safe-area-inset-top))
+    max(1.25rem, env(safe-area-inset-right))
+    max(1.25rem, env(safe-area-inset-bottom))
+    max(1.25rem, env(safe-area-inset-left));
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.app-boot__logo-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.app-boot__logo {
+  display: block;
+  width: min(220px, 58vw);
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 4px 0 rgba(110, 57, 17, 0.35))
+    drop-shadow(0 2px 14px rgba(0, 40, 90, 0.28));
+}
+
 .app-boot__bottom {
   position: relative;
-  z-index: 1;
+  flex-shrink: 0;
   pointer-events: auto;
   width: 100%;
   max-width: min(26rem, 100%);

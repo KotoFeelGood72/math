@@ -5,12 +5,14 @@
     :class="cardModifier"
     v-bind="attrs"
   >
-    <span class="menu-card__icon" aria-hidden="true">
-      <Icon :icon="icon" />
-    </span>
-    <span class="menu-card__body">
-      <span class="menu-card__title">{{ title }}</span>
-      <span v-if="subLabel" class="menu-card__sub">{{ subLabel }}</span>
+    <span class="menu-card__left">
+      <span class="menu-card__icon" aria-hidden="true">
+        <Icon :icon="icon" />
+      </span>
+      <span class="menu-card__body">
+        <span class="menu-card__title">{{ title }}</span>
+        <span v-if="subLabel" class="menu-card__sub">{{ subLabel }}</span>
+      </span>
     </span>
     <span class="m3-go-btn menu-card__go">{{ actionLabel }}</span>
   </button>
@@ -46,15 +48,23 @@ const cardModifier = computed(() => {
 
 <style scoped>
 .menu-card {
-  display: grid;
-  grid-template-columns: 2.65rem 1fr auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.58rem;
   padding: 0.65rem 0.65rem 0.65rem 0.75rem;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
   border-radius: 18px;
+}
+
+.menu-card__left {
+  display: flex;
+  align-items: center;
+  gap: 0.58rem;
+  min-width: 0;
+  flex: 1;
 }
 .menu-card:active {
   transform: translateY(2px);
@@ -113,6 +123,7 @@ const cardModifier = computed(() => {
     0 1px 0 #6e3911;
 }
 .menu-card__go {
+  flex-shrink: 0;
   padding: 0.45rem 0.95rem;
   font-size: 0.95rem;
 }

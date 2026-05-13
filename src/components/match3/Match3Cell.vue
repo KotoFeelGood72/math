@@ -39,11 +39,13 @@
         draggable="false"
       />
       <template v-if="stoneLayers <= 0">
-        <span v-if="specialIcon" class="m3cell__overlay" aria-hidden="true">
-          <Icon
-            :icon="specialIcon"
-            class="m3cell__overlay-ico"
-            :style="specialIconStyle"
+        <span v-if="specialOverlaySrc" class="m3cell__overlay" aria-hidden="true">
+          <img
+            :src="specialOverlaySrc"
+            class="m3cell__overlay-img"
+            :style="specialOverlayStyle"
+            alt=""
+            draggable="false"
           />
         </span>
       </template>
@@ -61,11 +63,12 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Icon } from '@iconify/vue'
 import { COLOR_PALETTE } from '@/game/levelGenerator.js'
 import {
   getBoardChipIconUrl,
+  getBombOverlayUrl,
   getRainbowChipIconUrl,
+  getRocketOverlayUrl,
   getStoneIconUrl,
 } from '@/game/chipIcons.js'
 import { getColor, getKind } from '@/game/match3Engine.js'
@@ -108,17 +111,15 @@ const iconSrc = computed(() => {
 
 const stoneIconSrc = computed(() => getStoneIconUrl())
 
-const specialIcon = computed(() => {
+const specialOverlaySrc = computed(() => {
   if (props.stoneLayers > 0) return null
-  if (kind.value === 'lineH') return 'mdi:rocket'
-  if (kind.value === 'lineV') return 'mdi:rocket'
-  if (kind.value === 'bomb') return 'mdi:bomb'
+  if (kind.value === 'lineH' || kind.value === 'lineV') return getRocketOverlayUrl()
+  if (kind.value === 'bomb') return getBombOverlayUrl()
   return null
 })
 
-const specialIconStyle = computed(() => {
-  if (!specialIcon.value) return null
-  // Для вертикальной ракеты просто поворачиваем иконку.
+const specialOverlayStyle = computed(() => {
+  if (!specialOverlaySrc.value) return null
   if (kind.value === 'lineV') return { transform: 'rotate(-90deg)' }
   return null
 })
@@ -210,23 +211,23 @@ const ariaLabel = computed(() => {
   opacity: 1;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -3px 8px rgba(55, 105, 135, 0.14),
+    inset 0 -2px 6px rgba(55, 105, 135, 0.06),
     0 0 0 3px rgba(255, 226, 122, 0.85),
-    0 10px 20px rgba(0, 0, 0, 0.18);
+    0 0 14px rgba(255, 226, 122, 0.35);
 }
 .m3cell--tutorial-from::before {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -3px 8px rgba(55, 105, 135, 0.14),
+    inset 0 -2px 6px rgba(55, 105, 135, 0.06),
     0 0 0 3px rgba(120, 168, 255, 0.88),
-    0 10px 20px rgba(0, 0, 0, 0.18);
+    0 0 14px rgba(140, 185, 255, 0.38);
 }
 .m3cell--tutorial-to::before {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -3px 8px rgba(55, 105, 135, 0.14),
+    inset 0 -2px 6px rgba(55, 105, 135, 0.06),
     0 0 0 3px rgba(255, 180, 88, 0.9),
-    0 10px 20px rgba(0, 0, 0, 0.18);
+    0 0 14px rgba(255, 200, 120, 0.4);
 }
 .m3cell--tutorial .m3cell__anim {
   animation: m3-tutorial-bob 0.8s ease-in-out infinite;
@@ -384,9 +385,10 @@ const ariaLabel = computed(() => {
   z-index: 20;
 }
 
-.m3cell__overlay-ico {
-  width: 1.35rem;
-  height: 1.35rem;
+.m3cell__overlay-img {
+  width: min(48%, 2.25rem);
+  height: min(48%, 2.25rem);
+  object-fit: contain;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
   position: relative;
   z-index: 21;

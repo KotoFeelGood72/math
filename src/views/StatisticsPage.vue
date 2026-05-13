@@ -158,16 +158,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 
 /* Шапка — как на экране настроек */
 .stats__top {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 0.35rem 0.45rem;
+  justify-content: space-between;
+  gap: 0.45rem;
   padding: max(0.6rem, env(safe-area-inset-top, 0px)) 0.7rem 0.45rem;
 }
 
 .stats__back {
+  flex: 0 0 2.4rem;
   width: 2.4rem;
   height: 2.4rem;
+  flex-shrink: 0;
   border: 3px solid var(--m3-border-dark);
   border-radius: 12px;
   background: linear-gradient(180deg, var(--m3-go-1) 0%, var(--m3-go-2) 100%);
@@ -193,6 +195,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .stats__title {
+  flex: 1;
   margin: 0;
   text-align: center;
   font-size: 0.95rem;
@@ -210,7 +213,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .stats__top-spacer {
+  flex: 0 0 2.4rem;
   width: 2.4rem;
+  flex-shrink: 0;
 }
 
 .stats__sections {
@@ -272,8 +277,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
     rgba(230, 215, 185, 0.48) 100%
   );
   display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
   min-width: 0;
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.55),
@@ -281,6 +288,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .stats__card-label {
+  flex: 1;
+  min-width: 0;
   font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -292,6 +301,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .stats__card-value {
+  flex-shrink: 0;
+  text-align: right;
   font-size: 1.28rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;

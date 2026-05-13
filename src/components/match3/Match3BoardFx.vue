@@ -1,32 +1,39 @@
 <template>
-  <div class="m3bf" aria-hidden="true">
+  <div
+    class="m3bf"
+    aria-hidden="true"
+    :style="{
+      '--m3bf-f-glow': `url(#${filterId}-glow)`,
+      '--m3bf-f-glow-strong': `url(#${filterId}-glow-strong)`,
+    }"
+  >
     <svg
       class="m3bf__svg"
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
     >
       <defs>
-        <filter id="m3bf-glow" x="-50%" y="-50%" width="200%" height="200%">
+        <filter :id="`${filterId}-glow`" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="1.2" result="b" />
           <feMerge>
             <feMergeNode in="b" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        <filter id="m3bf-glow-strong" x="-80%" y="-80%" width="260%" height="260%">
+        <filter :id="`${filterId}-glow-strong`" x="-80%" y="-80%" width="260%" height="260%">
           <feGaussianBlur stdDeviation="2.5" result="b" />
           <feMerge>
             <feMergeNode in="b" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        <linearGradient id="m3bf-beam" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient :id="`${filterId}-beam`" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="rgba(255,255,255,0)" />
           <stop offset="45%" stop-color="rgba(255,248,180,0.95)" />
           <stop offset="55%" stop-color="rgba(255,220,90,0.88)" />
           <stop offset="100%" stop-color="rgba(255,255,255,0)" />
         </linearGradient>
-        <radialGradient id="m3bf-bomb-core" cx="50%" cy="50%" r="50%">
+        <radialGradient :id="`${filterId}-bomb-core`" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stop-color="rgba(255,255,255,0.95)" />
           <stop offset="35%" stop-color="rgba(255,230,120,0.75)" />
           <stop offset="70%" stop-color="rgba(255,160,60,0.35)" />
@@ -56,6 +63,7 @@
           :y="bandY(fx.row) - bandHalf"
           width="100"
           :height="bandH"
+          :fill="'url(#' + filterId + '-beam)'"
         />
       </g>
 
@@ -67,6 +75,7 @@
           y="0"
           :width="bandH"
           height="100"
+          :fill="'url(#' + filterId + '-beam)'"
         />
       </g>
 
@@ -78,6 +87,7 @@
           :y="bandY(fx.row) - bandHalf"
           width="100"
           :height="bandH"
+          :fill="'url(#' + filterId + '-beam)'"
         />
         <rect
           class="m3bf-band m3bf-band--v"
@@ -85,6 +95,7 @@
           y="0"
           :width="bandH"
           height="100"
+          :fill="'url(#' + filterId + '-beam)'"
         />
         <circle
           class="m3bf-cross-core"
@@ -107,6 +118,7 @@
           :cx="cx(fx.origin.r, fx.origin.c)"
           :cy="cy(fx.origin.r, fx.origin.c)"
           r="10"
+          :fill="'url(#' + filterId + '-bomb-core)'"
         />
       </g>
     </svg>
@@ -114,12 +126,16 @@
 </template>
 
 <script setup>
+import { useId } from 'vue'
+
 const props = defineProps({
   /** @type {{ type: string } | null} */
   fx: { type: Object, default: null },
   rows: { type: Number, required: true },
   cols: { type: Number, required: true },
 })
+
+const filterId = useId().replace(/[^a-zA-Z0-9_-]/g, '') || 'm3bfx'
 
 const bandH = 7
 const bandHalf = bandH / 2
@@ -164,7 +180,7 @@ function cyTr(k) {
   stroke: rgba(255, 252, 210, 0.95);
   stroke-width: 1.4;
   stroke-linecap: round;
-  filter: url(#m3bf-glow-strong);
+  filter: var(--m3bf-f-glow-strong);
   opacity: 0;
   animation: m3bf-zap 0.38s ease-out forwards;
 }
@@ -186,8 +202,7 @@ function cyTr(k) {
 }
 
 .m3bf-band {
-  fill: url(#m3bf-beam);
-  filter: url(#m3bf-glow);
+  filter: var(--m3bf-f-glow);
   opacity: 0;
   animation: m3bf-beam-in 0.34s ease-out forwards;
 }
@@ -210,7 +225,7 @@ function cyTr(k) {
 
 .m3bf-cross-core {
   fill: rgba(255, 255, 255, 0.92);
-  filter: url(#m3bf-glow-strong);
+  filter: var(--m3bf-f-glow-strong);
   opacity: 0;
   animation: m3bf-core-pop 0.38s ease-out 0.06s forwards;
 }
@@ -236,7 +251,6 @@ function cyTr(k) {
 }
 
 .m3bf-bomb-core {
-  fill: url(#m3bf-bomb-core);
   opacity: 0;
   animation: m3bf-ring 0.42s ease-out 0.06s forwards;
 }

@@ -1,56 +1,57 @@
 <template>
   <div ref="wrapEl" class="m3board-wrap">
-    <div
-      ref="boardEl"
-      class="m3board"
-      :style="boardStyle"
-      role="grid"
-      :aria-rowcount="rows"
-      :aria-colcount="cols"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="onPointerUp"
-      @pointercancel="onPointerCancel"
-    >
-      <template v-for="(row, r) in board" :key="r">
-        <div
-          v-for="(cell, c) in row"
-          :key="`${r}-${c}`"
-          class="m3board__cell"
-          :class="{
-            'm3board__cell--hole': cell === BLOCKED,
-            'm3board__cell--booster-target':
-              boosterAim && cell !== BLOCKED && !hasStone(r, c),
-          }"
-          :data-m3-cell="`${r},${c}`"
-          role="gridcell"
-          :aria-rowindex="r + 1"
-          :aria-colindex="c + 1"
-        >
-          <Match3Cell
-            v-if="cell !== BLOCKED"
-            :value="cell"
-            :stone-layers="stoneHp[r]?.[c] ?? 0"
-            :selected="!!selected && selected.r === r && selected.c === c"
-            :matching="matchedKeys?.has(`${r},${c}`) || false"
-            :spawning="spawnedKeys?.has(`${r},${c}`) || false"
-            :drag-offset="getDragOffset(r, c)"
-            :hint-shake="hintCellKey !== '' && hintCellKey === `${r},${c}`"
-            :tutorial-highlight="
-              (tutorialFromKey !== '' && tutorialFromKey === `${r},${c}`) ||
-              (tutorialToKey !== '' && tutorialToKey === `${r},${c}`)
-            "
-            :tutorial-role="
-              tutorialFromKey !== '' && tutorialFromKey === `${r},${c}`
-                ? 'from'
-                : tutorialToKey !== '' && tutorialToKey === `${r},${c}`
-                  ? 'to'
-                  : null
-            "
-          />
-        </div>
-      </template>
-
+    <div class="m3board-stack">
+      <div
+        ref="boardEl"
+        class="m3board"
+        :style="boardStyle"
+        role="grid"
+        :aria-rowcount="rows"
+        :aria-colcount="cols"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerCancel"
+      >
+        <template v-for="(row, r) in board" :key="r">
+          <div
+            v-for="(cell, c) in row"
+            :key="`${r}-${c}`"
+            class="m3board__cell"
+            :class="{
+              'm3board__cell--hole': cell === BLOCKED,
+              'm3board__cell--booster-target':
+                boosterAim && cell !== BLOCKED && !hasStone(r, c),
+            }"
+            :data-m3-cell="`${r},${c}`"
+            role="gridcell"
+            :aria-rowindex="r + 1"
+            :aria-colindex="c + 1"
+          >
+            <Match3Cell
+              v-if="cell !== BLOCKED"
+              :value="cell"
+              :stone-layers="stoneHp[r]?.[c] ?? 0"
+              :selected="!!selected && selected.r === r && selected.c === c"
+              :matching="matchedKeys?.has(`${r},${c}`) || false"
+              :spawning="spawnedKeys?.has(`${r},${c}`) || false"
+              :drag-offset="getDragOffset(r, c)"
+              :hint-shake="hintCellKey !== '' && hintCellKey === `${r},${c}`"
+              :tutorial-highlight="
+                (tutorialFromKey !== '' && tutorialFromKey === `${r},${c}`) ||
+                (tutorialToKey !== '' && tutorialToKey === `${r},${c}`)
+              "
+              :tutorial-role="
+                tutorialFromKey !== '' && tutorialFromKey === `${r},${c}`
+                  ? 'from'
+                  : tutorialToKey !== '' && tutorialToKey === `${r},${c}`
+                    ? 'to'
+                    : null
+              "
+            />
+          </div>
+        </template>
+      </div>
       <div
         v-if="clearFx"
         class="m3board__fx-layer"
@@ -368,6 +369,14 @@ function getMatchCentroidScreen(keySet) {
   return { x: sx / n, y: sy / n }
 }
 
+/** Bounding box сетки в координатах viewport (учитывает scale/transform). */
+function getBoardGridScreenRect() {
+  const el = boardEl.value
+  if (!el) return null
+  const r = el.getBoundingClientRect()
+  return { left: r.left, top: r.top, width: r.width, height: r.height }
+}
+
 function getCellCenterScreen(r, c) {
   const elBoard = boardEl.value
   if (!elBoard) return null
@@ -377,7 +386,11 @@ function getCellCenterScreen(r, c) {
   return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }
 }
 
-defineExpose({ getMatchCentroidScreen, getCellCenterScreen })
+defineExpose({
+  getMatchCentroidScreen,
+  getCellCenterScreen,
+  getBoardGridScreenRect,
+})
 </script>
 
 <style scoped>
@@ -386,6 +399,14 @@ defineExpose({ getMatchCentroidScreen, getCellCenterScreen })
   max-height: 100%;
   padding: 0.1rem;
   box-sizing: border-box;
+}
+
+.m3board-stack {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
 }
 
 .m3board {
@@ -442,9 +463,8 @@ defineExpose({ getMatchCentroidScreen, getCellCenterScreen })
 }
 
 .m3board__fx-layer {
-  grid-column: 1 / -1;
-  grid-row: 1 / -1;
-  position: relative;
+  position: absolute;
+  inset: 0;
   pointer-events: none;
   z-index: 15;
   min-width: 0;

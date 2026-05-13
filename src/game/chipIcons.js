@@ -62,3 +62,21 @@ export function getRainbowChipIconUrl() {
     return null
   }
 }
+
+/** Оверлей на фишке: горизонтальная / вертикальная ракета. */
+export function getRocketOverlayUrl() {
+  try {
+    return new URL('../assets/images/ico/raketa.png', import.meta.url).href
+  } catch {
+    return null
+  }
+}
+
+/** Оверлей на фишке: бомба 3×3. */
+export function getBombOverlayUrl() {
+  try {
+    return new URL('../assets/images/ico/bomb.png', import.meta.url).href
+  } catch {
+    return null
+  }
+}

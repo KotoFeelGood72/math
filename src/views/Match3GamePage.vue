@@ -149,8 +149,12 @@
         @pointerdown.stop
         @click.stop
       >
-        <div v-if="tutorialHole1Style" class="m3-tutorial__hole" :style="tutorialHole1Style" />
-        <div v-if="tutorialHole2Style" class="m3-tutorial__hole" :style="tutorialHole2Style" />
+        <div
+          v-if="tutorialDimLayerStyle"
+          class="m3-tutorial__dim"
+          :style="tutorialDimLayerStyle"
+          aria-hidden="true"
+        />
         <div
           v-if="tutorialFromStyle"
           class="m3-tutorial__ring m3-tutorial__ring--from"
@@ -288,22 +292,28 @@
         </button>
       </div>
 
-      <div class="play__fly-layer" aria-hidden="true">
+      <Teleport to="body">
         <div
-          v-for="c in flyCoins"
-          :key="c.id"
-          class="play__fly-coin"
-          :style="{
-            left: `${c.x0}px`,
-            top: `${c.y0}px`,
-            '--dx': `${c.x1 - c.x0}px`,
-            '--dy': `${c.y1 - c.y0}px`,
-            animationDelay: `${c.delay}ms`,
-          }"
+          v-if="flyCoins.length > 0"
+          class="play__fly-layer"
+          aria-hidden="true"
         >
-          <Icon icon="mdi:cash" class="play__fly-coin__icon" />
+          <div
+            v-for="c in flyCoins"
+            :key="c.id"
+            class="play__fly-coin"
+            :style="{
+              left: `${c.x0}px`,
+              top: `${c.y0}px`,
+              '--dx': `${c.x1 - c.x0}px`,
+              '--dy': `${c.y1 - c.y0}px`,
+              animationDelay: `${c.delay}ms`,
+            }"
+          >
+            <Icon icon="mdi:cash" class="play__fly-coin__icon" />
+          </div>
         </div>
-      </div>
+      </Teleport>
 
       <footer class="play__foot">
         <p v-if="status === 'won'" class="play__hint play__hint--ok">
@@ -455,7 +465,6 @@ const {
   stars,
   coinsEarned,
   objective,
-  config,
   matchedKeys,
   clearFx,
   spawnedKeys,
@@ -490,8 +499,8 @@ const tutorialFromStyle = ref(null)
 const tutorialToStyle = ref(null)
 const tutorialHintStyle = ref(null)
 const tutorialArrowStyle = ref(null)
-const tutorialHole1Style = ref(null)
-const tutorialHole2Style = ref(null)
+/** Одно затемнение с маской: «окно» на всю сетку (см. makeTutorialDimLayerStyle). */
+const tutorialDimLayerStyle = ref(null)
 let hudTour = null
 let swapTour = null
 
@@ -571,7 +580,6 @@ function startSwapTourIfNeeded() {
   if (!tutorialActive.value) return
   if (tutorialSwapTourActive.value) return
   if (tutorialHudTourActive.value) return
-  const board = boardRef.value
   const fromKey = `${tutorialExpected.r},${tutorialExpected.c}`
   // element должен существовать в DOM (ищем внутри фрейма)
   const root = playRootRef.value
@@ -584,7 +592,10 @@ function startSwapTourIfNeeded() {
     showProgress: false,
     showButtons: ['done'],
     disableActiveInteraction: false,
-    overlayOpacity: 0.14,
+    /** Без fade оверлея — иначе кадр с непрозрачным слоём может на миг затемнить поле. */
+    animate: false,
+    /** Своё затемнение вне поля — иконки доски не должны быть под оверлеем Driver. */
+    overlayOpacity: 0,
     stagePadding: 8,
     prevBtnText: 'Назад',
     doneBtnText: 'Понял',
@@ -600,12 +611,71 @@ function startSwapTourIfNeeded() {
       popover: {
         title: 'Свайп',
         description: 'Проведи фишку вправо, чтобы собрать тройку.',
-        side: 'bottom',
+        side: 'top',
         align: 'center',
       },
     },
   ])
   swapTour.drive()
+}
+
+const TUTORIAL_DIM_ALPHA = 0.28
+
+/**
+ * Окно в маске затемнения (чёрный в SVG = не затемнять). rx — скругление «капсулы».
+ * @typedef {{ x: number, y: number, w: number, h: number, rx?: number }} TutorialDimHole
+ */
+
+/**
+ * Маска на весь экран: белое = затемнение, чёрные прямоугольники = «окна» без затемнения.
+ * @param {number} rw
+ * @param {number} rh
+ * @param {TutorialDimHole[]} holes
+ */
+function makeTutorialDimLayerStyle(rw, rh, holes) {
+  if (!(rw > 0) || !(rh > 0) || !holes?.length) return null
+  const rects = holes
+    .filter((h) => h.w > 0 && h.h > 0)
+    .map((h) => {
+      const rx =
+        typeof h.rx === 'number'
+          ? h.rx
+          : Math.min(18, h.w / 2, h.h / 2)
+      return `<rect x="${h.x}" y="${h.y}" width="${h.w}" height="${h.h}" rx="${rx}" fill="black"/>`
+    })
+    .join('')
+  if (!rects) return null
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${rw}" height="${rh}"><rect width="100%" height="100%" fill="white"/>${rects}</svg>`
+  const url = `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`
+  return {
+    background: `rgba(0, 0, 0, ${TUTORIAL_DIM_ALPHA})`,
+    WebkitMaskImage: url,
+    maskImage: url,
+    WebkitMaskSize: '100% 100%',
+    maskSize: '100% 100%',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskPosition: '0 0',
+    maskPosition: '0 0',
+  }
+}
+
+/** Прямоугольник элемента в координатах корня `.play` + отступ; rx по умолчанию — «капсула». */
+function getTutorialDimHoleForElement(el, rootRect, pad, rxCapsule) {
+  if (!el?.getBoundingClientRect || !rootRect) return null
+  const r = el.getBoundingClientRect()
+  const hl = Math.max(0, r.left - rootRect.left - pad)
+  const ht = Math.max(0, r.top - rootRect.top - pad)
+  const hr = Math.min(rootRect.width, r.right - rootRect.left + pad)
+  const hb = Math.min(rootRect.height, r.bottom - rootRect.top + pad)
+  const w = Math.max(0, hr - hl)
+  const h = Math.max(0, hb - ht)
+  if (!(w > 0) || !(h > 0)) return null
+  const rx =
+    typeof rxCapsule === 'number'
+      ? rxCapsule
+      : Math.min(w / 2, h / 2, 26)
+  return { x: hl, y: ht, w, h, rx }
 }
 
 async function updateTutorialUi() {
@@ -614,8 +684,7 @@ async function updateTutorialUi() {
     tutorialToStyle.value = null
     tutorialHintStyle.value = null
     tutorialArrowStyle.value = null
-    tutorialHole1Style.value = null
-    tutorialHole2Style.value = null
+    tutorialDimLayerStyle.value = null
     return
   }
   await nextTick()
@@ -628,39 +697,9 @@ async function updateTutorialUi() {
   tutorialFromStyle.value = null
   tutorialToStyle.value = null
   tutorialArrowStyle.value = null
-  tutorialHole1Style.value = null
-  tutorialHole2Style.value = null
+  tutorialDimLayerStyle.value = null
   // Пока идёт HUD-тур (Driver.js) — наш оверлей по клеткам не показываем.
   if (tutorialHudTourActive.value) return
-
-  function ringFromRect(rect, scale = 1.05) {
-    const cx = rect.left + rect.width / 2 - rootRect.left
-    const cy = rect.top + rect.height / 2 - rootRect.top
-    const s = Math.max(rect.width, rect.height) * scale
-    const left = cx - s / 2
-    const top = cy - s / 2
-    return {
-      style: {
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${s}px`,
-        height: `${s}px`,
-      },
-      cx,
-      cy,
-      s,
-      left,
-      top,
-    }
-  }
-  function holeFromRing(ring, inset = 6) {
-    if (!ring) return null
-    const left = ring.left + inset
-    const top = ring.top + inset
-    const w = Math.max(0, ring.s - inset * 2)
-    const h = Math.max(0, ring.s - inset * 2)
-    return { left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${h}px` }
-  }
 
   // swap step
   const from = b.getCellCenterScreen(tutorialExpected.r, tutorialExpected.c)
@@ -697,19 +736,35 @@ async function updateTutorialUi() {
     width: `${ringSize}px`,
     height: `${ringSize}px`,
   }
-  // Для swap считаем hole напрямую (без parseFloat), чтобы не было “полос”.
-  tutorialHole1Style.value = {
-    left: `${fx - ringSize / 2 + 8}px`,
-    top: `${fy - ringSize / 2 + 8}px`,
-    width: `${Math.max(0, ringSize - 16)}px`,
-    height: `${Math.max(0, ringSize - 16)}px`,
+  /** «Окна» в затемнении: вся сетка (матчи) + карточка «Цели» капсулой, как на HUD. */
+  const holes = []
+  const grid = b.getBoardGridScreenRect?.() ?? null
+  const gridPad = 4
+  if (grid && grid.width > 0 && grid.height > 0) {
+    const hl = Math.max(0, grid.left - rootRect.left - gridPad)
+    const ht = Math.max(0, grid.top - rootRect.top - gridPad)
+    const hr = Math.min(
+      rootRect.width,
+      grid.left - rootRect.left + grid.width + gridPad,
+    )
+    const hb = Math.min(
+      rootRect.height,
+      grid.top - rootRect.top + grid.height + gridPad,
+    )
+    const hw = Math.max(0, hr - hl)
+    const hh = Math.max(0, hb - ht)
+    if (hw > 0 && hh > 0) {
+      holes.push({ x: hl, y: ht, w: hw, h: hh, rx: 18 })
+    }
   }
-  tutorialHole2Style.value = {
-    left: `${tx - ringSize / 2 + 8}px`,
-    top: `${ty - ringSize / 2 + 8}px`,
-    width: `${Math.max(0, ringSize - 16)}px`,
-    height: `${Math.max(0, ringSize - 16)}px`,
-  }
+
+  const goalsHole = getTutorialDimHoleForElement(goalsCardRef.value, rootRect, 8)
+  if (goalsHole) holes.push(goalsHole)
+
+  tutorialDimLayerStyle.value =
+    holes.length > 0
+      ? makeTutorialDimLayerStyle(rootRect.width, rootRect.height, holes)
+      : null
 }
 
 const boosterIconBomb = computed(() => getBoosterIconUrl('bomb'))
@@ -1848,23 +1903,25 @@ async function exitToMenu() {
 .m3-tutorial--swap {
   pointer-events: none;
 }
-.m3-tutorial__hole {
+
+.m3-tutorial__dim {
   position: absolute;
-  border-radius: 12px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
-  pointer-events: auto;
-}
-.m3-tutorial--swap .m3-tutorial__hole {
+  inset: 0;
+  z-index: 0;
   pointer-events: none;
 }
+
 .m3-tutorial__ring {
+  z-index: 1;
   position: absolute;
   border-radius: 14px;
-  border: 3px solid rgba(255, 255, 255, 0.9);
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  /* Только светлое кольцо: тень без чёрного слоя — иначе она рисуется поверх фишек и «гасит» иконки. */
   box-shadow:
     0 0 0 4px rgba(255, 226, 122, 0.55),
-    0 10px 22px rgba(0, 0, 0, 0.22);
-  background: rgba(255, 255, 255, 0.06);
+    0 0 16px rgba(255, 235, 160, 0.55);
+  background: transparent;
+  pointer-events: none;
 }
 
 .m3-tutorial__step-panel {
