@@ -309,8 +309,11 @@ function applyCloudSnapshot({ blob, statsFromCloud }) {
   }
 }
 
-/* Фон сразу при запуске приложения, не после SDK и не с экрана уровня. */
-startBackgroundMusicIfNeeded()
+/**
+ * Музыку стартуем только после того, как Yandex SDK инициализирован и
+ * игрок попал на главное меню (см. watch ниже): до этого момента видно
+ * превью-сплеш SDK / наш прелоадер, и звук мешает / блокируется autoplay.
+ */
 
 /**
  * Из двух источников (облако и локальный backup) берём более свежий по `savedAt`.
@@ -374,7 +377,6 @@ void (async () => {
 })()
 
 onMounted(() => {
-  startBackgroundMusicIfNeeded()
   const root = appRootEl.value
   if (root) {
     root.addEventListener('contextmenu', blockNativeSelectionAndContextMenu)
@@ -517,6 +519,26 @@ watch(
     setBackgroundMusicVolume(v)
     notifyMusicVolumeChanged()
   },
+)
+
+/**
+ * Запускаем фоновую музыку только когда:
+ *  1) Bootstrap завершён (Yandex SDK инициализирован, прогресс загружен,
+ *     минимальное время прелоадера прошло) — `bootReady === true`,
+ *  2) Игрок попал на главное меню — `route.name === 'menu'`.
+ * `initBackgroundMusic` / `startAudioFocus` идемпотентны, повторные срабатывания
+ * watch'а безопасны. Реальное `play()` всё равно произойдёт по первому
+ * пользовательскому жесту (см. `resumeBackgroundMusicFromUserGesture`) —
+ * это требование autoplay-policy браузеров.
+ */
+watch(
+  [bootReady, () => route.name],
+  ([ready, name]) => {
+    if (ready && name === 'menu') {
+      startBackgroundMusicIfNeeded()
+    }
+  },
+  { immediate: true },
 )
 
 const inGameFlow = computed(
