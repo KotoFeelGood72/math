@@ -725,7 +725,7 @@ body {
 }
 
 .m3-modal-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 220;
   display: flex;

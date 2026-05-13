@@ -188,13 +188,13 @@
           :disabled="boostBarDisabled"
           :title="
             boosterBomb > 0
-              ? 'Взрыв 3×3 — нажмите и выберите клетку'
+              ? `${BOOSTER_DISPLAY_NAME.bomb} — взрыв 3×3, нажмите и выберите клетку`
               : 'Посмотреть рекламу и получить бустер'
           "
           :aria-label="
             boosterBomb > 0
-              ? 'Бомба, зарядов ' + boosterBomb
-              : 'Бомба закончилась — получить за рекламу'
+              ? `${BOOSTER_DISPLAY_NAME.bomb}, зарядов ${boosterBomb}`
+              : `${BOOSTER_DISPLAY_NAME.bomb} закончился — получить за рекламу`
           "
           @click="selectBooster('bomb')"
         >
@@ -219,13 +219,13 @@
           :disabled="boostBarDisabled"
           :title="
             boosterClock > 0
-              ? 'Время — откат хода или доп. ходы'
+              ? `${BOOSTER_DISPLAY_NAME.clock} — откат хода или доп. ходы`
               : 'Посмотреть рекламу и получить бустер'
           "
           :aria-label="
             boosterClock > 0
-              ? 'Время, зарядов ' + boosterClock
-              : 'Время закончилось — получить за рекламу'
+              ? `${BOOSTER_DISPLAY_NAME.clock}, зарядов ${boosterClock}`
+              : `${BOOSTER_DISPLAY_NAME.clock} закончился — получить за рекламу`
           "
           @click="selectBooster('clock')"
         >
@@ -251,13 +251,13 @@
           :disabled="boostBarDisabled"
           :title="
             boosterStar > 0
-              ? 'Убрать все фишки цвета — нажмите и выберите клетку'
+              ? `${BOOSTER_DISPLAY_NAME.star} — убрать все фишки цвета, нажмите и выберите клетку`
               : 'Посмотреть рекламу и получить бустер'
           "
           :aria-label="
             boosterStar > 0
-              ? 'Звезда, зарядов ' + boosterStar
-              : 'Звезда закончилась — получить за рекламу'
+              ? `${BOOSTER_DISPLAY_NAME.star}, зарядов ${boosterStar}`
+              : `${BOOSTER_DISPLAY_NAME.star} закончился — получить за рекламу`
           "
           @click="selectBooster('star')"
         >
@@ -473,6 +473,7 @@ import { Icon } from '@iconify/vue'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { getBoardChipIconUrl, getBoosterIconUrl, getStoneIconUrl } from '@/game/chipIcons.js'
+import { BOOSTER_DISPLAY_NAME } from '@/game/boosterDisplayNames.js'
 import { findHintSwap } from '@/game/match3Engine.js'
 import {
   getColor,
@@ -631,8 +632,8 @@ function startHudTourIfNeeded() {
         title: 'Усилители',
         description:
           'Нажми на усилитель, затем выбери клетку на поле.\n' +
-          'Бомба — взрыв 3×3. Звезда — убирает все фишки выбранного цвета.\n' +
-          'Часы — откат хода или +ходы, если откатывать нечего.',
+          `${BOOSTER_DISPLAY_NAME.bomb} — взрыв 3×3. ${BOOSTER_DISPLAY_NAME.star} — убирает все фишки выбранного цвета.\n` +
+          `${BOOSTER_DISPLAY_NAME.clock} — откат хода или +ходы, если откатывать нечего.`,
         side: 'top',
         align: 'center',
       },
@@ -869,8 +870,12 @@ const boosterNeedsBoardTap = computed(
   () => boosterPick.value === 'bomb' || boosterPick.value === 'star',
 )
 const boosterAimHintText = computed(() => {
-  if (boosterPick.value === 'bomb') return 'Нажмите на клетку — взрыв 3×3'
-  if (boosterPick.value === 'star') return 'Нажмите на фишку — уберётся весь цвет'
+  if (boosterPick.value === 'bomb') {
+    return `${BOOSTER_DISPLAY_NAME.bomb}: нажмите на клетку — взрыв 3×3`
+  }
+  if (boosterPick.value === 'star') {
+    return `${BOOSTER_DISPLAY_NAME.star}: нажмите на фишку — уберётся весь цвет`
+  }
   return ''
 })
 /** Пока открыта rewarded — блокируем повторный тап */

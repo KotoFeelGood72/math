@@ -65,16 +65,16 @@
             <h2 id="help-toolbar-h" class="help__panel-title">Панель бустеров</h2>
             <ul class="help__list">
               <li>
-                <strong>Бомба</strong> — нажми, затем выбери клетку: взрыв 3×3,
+                <strong>{{ BOOSTER_DISPLAY_NAME.bomb }}</strong> — нажми, затем выбери клетку: взрыв 3×3,
                 тратит ход.
               </li>
               <li>
-                <strong>Время</strong> — отменяет последний удачный ход с
+                <strong>{{ BOOSTER_DISPLAY_NAME.clock }}</strong> — отменяет последний удачный ход с
                 совпадениями (если он был). Если откатывать нечего, даёт несколько
                 дополнительных ходов.
               </li>
               <li>
-                <strong>Звезда</strong> — убирает все фишки одного цвета с поля,
+                <strong>{{ BOOSTER_DISPLAY_NAME.star }}</strong> — убирает все фишки одного цвета с поля,
                 тратит ход.
               </li>
               <li>
@@ -89,8 +89,10 @@
             <p class="help__p">
               За прохождение уровней получаешь <strong>звёзды</strong> и
               <strong>монеты</strong>. В <strong>магазине</strong> монеты можно обменять на
-              дополнительные заряды бустеров — они добавятся к запасу и подтянутся при старте
-              следующего уровня (до 8 зарядов каждого типа за раз, сверх базовых трёх).
+              дополнительные заряды бустеров — они попадут в запас и при старте следующего уровня часть
+              перенесётся на панель (до 8 зарядов каждого типа за раз). Бесплатные по 3 каждого типа на
+              панели выдаются <strong>один раз за игру</strong> при первом обычном уровне; дальше — только
+              из запаса, рекламы и покупок.
             </p>
             <p class="help__p">
               Новые уровни открываются по очереди. Удачи!
@@ -115,6 +117,7 @@ import { useRouter } from 'vue-router'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import MenuActionButton from '@/components/MenuActionButton.vue'
 import { Icon } from '@iconify/vue'
+import { BOOSTER_DISPLAY_NAME } from '@/game/boosterDisplayNames.js'
 const router = useRouter()
 
 function goBack() {

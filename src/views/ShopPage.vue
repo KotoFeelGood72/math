@@ -1,6 +1,10 @@
 <template>
   <PhoneFrame :parallax="false">
-    <div class="shop" data-allow-browser-scroll>
+    <div
+      class="shop"
+      :class="{ 'shop--detail-open': !!detailOffer || purchaseSuccessVisible }"
+      data-allow-browser-scroll
+    >
       <header class="shop__top">
         <button type="button" class="shop__back" aria-label="Назад" @click="goBack">
           <Icon icon="mdi:chevron-left" />
@@ -14,23 +18,18 @@
         </span>
       </header>
 
-      <p class="shop__intro m3-modal-panel">
-        Потрать <strong>монеты</strong> на дополнительные заряды бустеров. При старте уровня с запаса
-        автоматически переносится до <strong>8</strong> зарядов каждого типа (к базовым трём).
-      </p>
-
       <div class="shop__stock m3-wood-panel">
         <span class="shop__stock-label">В запасе к следующему уровню</span>
         <div class="shop__stock-row">
-          <span class="shop__stock-item" title="Бомба">
+          <span class="shop__stock-item" :title="BOOSTER_DISPLAY_NAME.bomb">
             <img v-if="iconBomb" :src="iconBomb" alt="" class="shop__stock-ico" />
             × {{ storedBoosters.bomb }}
           </span>
-          <span class="shop__stock-item" title="Время">
+          <span class="shop__stock-item" :title="BOOSTER_DISPLAY_NAME.clock">
             <img v-if="iconClock" :src="iconClock" alt="" class="shop__stock-ico" />
             × {{ storedBoosters.clock }}
           </span>
-          <span class="shop__stock-item" title="Звезда">
+          <span class="shop__stock-item" :title="BOOSTER_DISPLAY_NAME.star">
             <img v-if="iconStar" :src="iconStar" alt="" class="shop__stock-ico" />
             × {{ storedBoosters.star }}
           </span>
@@ -47,23 +46,37 @@
           <button
             type="button"
             class="shop__cell-tap"
-            :aria-label="`Подробнее: ${cell.offer.title}`"
+            :aria-label="`Подробнее: ${cell.offer.title}, цена ${cell.offer.price}`"
             @click="openShopDetail(cell.offer)"
           >
             <div class="shop__sticker-wrap">
               <img :src="cell.stickerUrl" alt="" class="shop__sticker" draggable="false" />
+              <span
+                class="m3-top-pill shop__price-chip"
+                :title="`Цена: ${cell.offer.price}`"
+                aria-hidden="true"
+              >
+                <span class="m3-top-pill__icon m3-top-pill__icon--coin" aria-hidden="true">
+                  <Icon icon="mdi:cash" />
+                </span>
+                {{ cell.offer.price }}
+              </span>
             </div>
             <span class="shop__cell-title">{{ cell.offer.title }}</span>
           </button>
           <div class="shop__cell-buy">
-            <span class="shop__price">
-              <Icon icon="mdi:cash" class="shop__price-ic" aria-hidden="true" />
-              {{ cell.offer.price }}
-            </span>
-            <button type="button" class="shop__buy-btn" @click="buy(cell.offer)">Купить</button>
+            <button type="button" class="shop__buy-btn" @click="buy(cell)">Купить</button>
           </div>
         </li>
       </ul>
+
+      <p v-if="toast" class="shop__toast" role="status">{{ toast }}</p>
+
+      <footer class="shop__bottom-bar">
+        <MenuActionButton variant="hero" class="shop__bottom-back" @click="goBack">
+          В меню
+        </MenuActionButton>
+      </footer>
 
       <div
         v-if="detailOffer"
@@ -86,13 +99,40 @@
         </div>
       </div>
 
-      <p v-if="toast" class="shop__toast" role="status">{{ toast }}</p>
-
-      <footer class="shop__bottom-bar">
-        <MenuActionButton variant="hero" class="shop__bottom-back" @click="goBack">
-          В меню
-        </MenuActionButton>
-      </footer>
+      <div
+        v-if="purchaseSuccessVisible"
+        class="m3-modal-overlay shop__detail-scrim shop__purchase-scrim"
+        role="presentation"
+        @click.self="closePurchaseSuccess"
+      >
+        <div
+          class="m3-modal-panel shop__detail-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-describedby="shop-purchase-success-lead"
+          :aria-labelledby="shopPurchaseSuccessTitleId"
+          @click.stop
+        >
+          <p id="shop-purchase-success-lead" class="shop__success-lead">
+            Вы успешно приобрели
+          </p>
+          <div class="shop__success-sticker-wrap" aria-hidden="true">
+            <img
+              v-if="purchaseSuccessStickerUrl"
+              :src="purchaseSuccessStickerUrl"
+              alt=""
+              class="shop__success-sticker"
+              draggable="false"
+            />
+          </div>
+          <h2 :id="shopPurchaseSuccessTitleId" class="shop__success-name">
+            {{ purchaseSuccessTitle }}
+          </h2>
+          <MenuActionButton variant="hero" class="shop__detail-ok" @click="closePurchaseSuccess">
+            Понятно
+          </MenuActionButton>
+        </div>
+      </div>
     </div>
   </PhoneFrame>
 </template>
@@ -107,6 +147,7 @@ import PhoneFrame from '@/components/PhoneFrame.vue'
 import MenuActionButton from '@/components/MenuActionButton.vue'
 import { Icon } from '@iconify/vue'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
+import { BOOSTER_DISPLAY_NAME } from '@/game/boosterDisplayNames.js'
 import { SHOP_OFFERS } from '@/game/shopCatalog.js'
 import { getBoosterIconUrl } from '@/game/chipIcons.js'
 import { getStickerUrls2x2 } from '@/game/shopStickers.js'
@@ -134,6 +175,10 @@ let toastTimer = 0
 /** @type {import('vue').Ref<(typeof SHOP_OFFERS)[number] | null>} */
 const detailOffer = ref(null)
 const shopDetailTitleId = 'shop-offer-detail-title'
+const purchaseSuccessVisible = ref(false)
+const purchaseSuccessTitle = ref('')
+const purchaseSuccessStickerUrl = ref('')
+const shopPurchaseSuccessTitleId = 'shop-purchase-success-title'
 
 function openShopDetail(offer) {
   detailOffer.value = offer
@@ -141,6 +186,12 @@ function openShopDetail(offer) {
 
 function closeShopDetail() {
   detailOffer.value = null
+}
+
+function closePurchaseSuccess() {
+  purchaseSuccessVisible.value = false
+  purchaseSuccessTitle.value = ''
+  purchaseSuccessStickerUrl.value = ''
 }
 
 function showToast(msg) {
@@ -152,7 +203,11 @@ function showToast(msg) {
   }, 2200)
 }
 
-function buy(offer) {
+/**
+ * @param {{ offer: (typeof SHOP_OFFERS)[number], stickerUrl: string }} cell
+ */
+function buy(cell) {
+  const { offer, stickerUrl } = cell
   if (!progress.trySpendCoins(offer.price)) {
     showToast('Недостаточно монет')
     return
@@ -164,15 +219,31 @@ function buy(offer) {
     progress.addStoredBooster('clock', offer.bundle.clock)
     progress.addStoredBooster('star', offer.bundle.star)
   }
-  showToast('Покупка добавлена в запас')
+  detailOffer.value = null
+  purchaseSuccessTitle.value = offer.title
+  purchaseSuccessStickerUrl.value = stickerUrl
+  purchaseSuccessVisible.value = true
 }
 
 function goBack() {
+  if (purchaseSuccessVisible.value) {
+    closePurchaseSuccess()
+    return
+  }
+  if (detailOffer.value) {
+    closeShopDetail()
+    return
+  }
   router.push({ name: 'menu' })
 }
 
 function onEscape(e) {
   if (e.key !== 'Escape') return
+  if (purchaseSuccessVisible.value) {
+    e.preventDefault()
+    closePurchaseSuccess()
+    return
+  }
   if (detailOffer.value) {
     e.preventDefault()
     closeShopDetail()
@@ -198,6 +269,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.shop.shop--detail-open {
+  overflow: hidden;
+  touch-action: none;
 }
 
 .shop__top {
@@ -233,13 +309,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 
 .shop__coins {
   flex: 0 0 auto;
-}
-
-.shop__intro {
-  margin: 0;
-  padding: 0.65rem 0.75rem;
-  font-size: 0.88rem;
-  line-height: 1.35;
 }
 
 .shop__stock {
@@ -326,8 +395,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 }
 
 .shop__sticker-wrap {
-  transition: transform 0.12s ease;
-}
+  position: relative;
   aspect-ratio: 1;
   width: 100%;
   border-radius: 12px;
@@ -338,6 +406,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+
+/* Чип цены: как HUD-плашка, компактно — угол картинки справа */
+.shop__price-chip.m3-top-pill {
+  position: absolute;
+  top: 0.28rem;
+  right: 0.28rem;
+  z-index: 2;
+  pointer-events: none;
+  min-height: 1.45rem;
+  padding: 0.08rem 0.42rem 0.08rem 0.1rem;
+  gap: 0.18rem;
+  font-size: 0.68rem;
+  border-width: 2px;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 0 rgba(110, 57, 17, 0.28),
+    0 2px 4px rgba(60, 30, 10, 0.22);
+}
+
+.shop__price-chip.m3-top-pill :deep(.m3-top-pill__icon) {
+  width: 1.12rem;
+  height: 1.12rem;
+  border-width: 2px;
+}
+
+.shop__price-chip.m3-top-pill :deep(.m3-top-pill__icon svg) {
+  width: 0.7rem;
+  height: 0.7rem;
 }
 
 .shop__sticker {
@@ -357,45 +455,98 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.shop__cell-hint {
+.shop__detail-scrim {
+  z-index: 500;
+}
+
+.shop__purchase-scrim {
+  z-index: 510;
+}
+
+.shop__success-lead {
   margin: 0;
-  font-size: 0.68rem;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.35;
+  color: #5c4030;
+}
+
+.shop__success-sticker-wrap {
+  align-self: center;
+  width: min(52%, 9.5rem);
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(230, 240, 255, 0.45) 100%
+  );
+  border: 2px solid rgba(110, 57, 17, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.shop__success-sticker {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.12));
+}
+
+.shop__success-name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 900;
+  text-align: center;
+  line-height: 1.2;
+  color: var(--m3-text-on-wood, #4a2810);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.shop__detail-dialog {
+  width: min(100%, 300px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 1.35rem 1rem 1.1rem;
+  box-sizing: border-box;
+}
+
+.shop__detail-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 900;
+  text-align: center;
+  color: var(--m3-text-on-wood, #4a2810);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.shop__detail-hint {
+  margin: 0;
+  font-size: 0.86rem;
   font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.4;
   text-align: center;
   color: #5c4030;
-  opacity: 0.95;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  overflow: hidden;
-  flex: 1;
-  min-height: 0;
+}
+
+.shop__detail-ok {
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .shop__cell-buy {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.32rem;
   margin-top: auto;
-  padding-top: 0.2rem;
-}
-
-.shop__price {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.18rem;
-  font-weight: 900;
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-  color: #6e3911;
-}
-
-.shop__price-ic {
-  font-size: 0.92rem;
-  opacity: 0.85;
+  padding-top: 0.15rem;
 }
 
 .shop__buy-btn {

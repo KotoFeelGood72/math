@@ -15,6 +15,11 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
   const tutorialDone = ref(false)
   /** Запас бустеров из магазина; часть переносится на старт уровня (pullBoostersForLevel). */
   const storedBoosters = ref({ bomb: 0, clock: 0, star: 0 })
+  /**
+   * Один раз за игру на обычных уровнях (не обучение) даётся по +3 к каждому бустеру на панели.
+   * Дальше — только из запаса, рекламы и магазина.
+   */
+  const claimedFreePlayBoosterTriplet = ref(false)
 
   /** Обучение только при первом запуске; флаг хранится в облаке Я.Игр (`tutorialDone`). */
   const needsTutorial = computed(() => !tutorialDone.value)
@@ -103,6 +108,16 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     return { bomb, clock, star }
   }
 
+  /**
+   * Сколько «базовых» зарядов каждого типа выдать при старте обычного уровня (3 один раз, потом 0).
+   * @returns {number}
+   */
+  function takePlayBoosterBasePerKind() {
+    if (claimedFreePlayBoosterTriplet.value) return 0
+    claimedFreePlayBoosterTriplet.value = true
+    return 3
+  }
+
   function trySpendCoins(amount) {
     const n = amount | 0
     if (n <= 0 || coins.value < n) return false
@@ -116,6 +131,7 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
       coins: coins.value,
       tutorialDone: tutorialDone.value,
       storedBoosters: { ...storedBoosters.value },
+      claimedFreePlayBoosterTriplet: claimedFreePlayBoosterTriplet.value,
     }
   }
 
@@ -162,6 +178,12 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
         tutorialDone.value = true
       }
     }
+    if (typeof snap.claimedFreePlayBoosterTriplet === 'boolean') {
+      claimedFreePlayBoosterTriplet.value = snap.claimedFreePlayBoosterTriplet
+    } else {
+      // Старые сохранения без поля: раньше «тройка» выдавалась каждый уровень — считаем набор уже полученным.
+      claimedFreePlayBoosterTriplet.value = true
+    }
   }
 
   function markTutorialDone() {
@@ -173,6 +195,7 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     coins.value = 0
     tutorialDone.value = false
     storedBoosters.value = { bomb: 0, clock: 0, star: 0 }
+    claimedFreePlayBoosterTriplet.value = false
   }
 
   return {
@@ -192,6 +215,7 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     addCoins,
     addStoredBooster,
     pullBoostersForLevel,
+    takePlayBoosterBasePerKind,
     trySpendCoins,
     getSnapshot,
     restoreSnapshot,
