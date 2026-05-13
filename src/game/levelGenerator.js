@@ -1,5 +1,6 @@
 import { createRng } from './rng.js'
-import { generateBoard, hasAnyMove, findMatches } from './match3Engine.js'
+import { generateBoard } from './match3Engine.js'
+import { LEVEL_PACK_SEEDS } from './levelPackSeeds.js'
 
 export const COLOR_PALETTE = [
   { id: 0, name: 'red', label: 'Красный', shape: 'circle', cssVar: '#ef4f4f' },
@@ -371,6 +372,7 @@ export function buildInitialStoneHp(rows, cols, mask, seed, level) {
  *   seed: number,
  *   stoneHpInitial: number[][],
  *   stonesTotalLayers: number,
+ *   boardRngSkew: number,
  * }}
  */
 export function getLevelConfig(level) {
@@ -386,7 +388,9 @@ export function getLevelConfig(level) {
     lv <= 30
       ? lv * 9173 + 17
       : (lv * 9173 + 17 + ((lv * lv) >>> 0) % 1_000_003 + lv * 0x9e3779b1) >>> 0
-  const stoneHpInitial = buildInitialStoneHp(rows, cols, shape.mask, seed, lv)
+  const [stoneSalt, gemSkew] = LEVEL_PACK_SEEDS[lv - 1] ?? [0, 0]
+  const stoneRngSeed = (seed + stoneSalt * 0x3c6ef372) >>> 0
+  const stoneHpInitial = buildInitialStoneHp(rows, cols, shape.mask, stoneRngSeed, lv)
   const stonesTotalLayers = sumStoneHpGrid(stoneHpInitial)
 
   let objective
@@ -414,6 +418,7 @@ export function getLevelConfig(level) {
     mask: shape.mask,
     stoneHpInitial,
     stonesTotalLayers,
+    boardRngSkew: gemSkew,
   }
 }
 
@@ -465,19 +470,10 @@ export function buildLevelBoard(config) {
     return config.presetBoard.map((row) => row.slice())
   }
   const stoneHp = config.stoneHpInitial ?? null
-  const { rows, cols, colors, mask, seed } = config
-  // Для части масок/камней один seed даёт «тупик»; детерминированно перебираем skew.
-  const maxSkew = 640
-  for (let skew = 0; skew < maxSkew; skew += 1) {
-    const trySeed = (seed + skew * 0x7f4a7c15) >>> 0
-    const rng = createRng(trySeed)
-    const board = generateBoard(rows, cols, colors, rng, mask, stoneHp)
-    if (findMatches(board, stoneHp).length === 0 && hasAnyMove(board, stoneHp)) {
-      return board
-    }
-  }
-  const rng = createRng(seed)
-  return generateBoard(rows, cols, colors, rng, mask, stoneHp)
+  const skew = config.boardRngSkew ?? 0
+  const trySeed = (config.seed + skew * 0x7f4a7c15) >>> 0
+  const rng = createRng(trySeed)
+  return generateBoard(config.rows, config.cols, config.colors, rng, config.mask, stoneHp)
 }
 
 export function describeObjective(objective) {

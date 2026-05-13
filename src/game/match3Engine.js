@@ -104,7 +104,7 @@ export function gemEligibleForColorMatch(board, stoneHp, r, c) {
  *  stoneHp — слои камня (как в уровне): фишку на камне нельзя двигать; без этого возможны «тупики».
  */
 export function generateBoard(rows, cols, colors, rng, mask = null, stoneHp = null) {
-  const maxBuildAttempts = 420
+  const maxBuildAttempts = 120
   /** @type {number[][] | null} */
   let lastBoard = null
   for (let attempt = 0; attempt < maxBuildAttempts; attempt += 1) {
@@ -125,9 +125,9 @@ export function generateBoard(rows, cols, colors, rng, mask = null, stoneHp = nu
   }
   // Последний fallback: не возвращаем «тупик» — добиваемся playable через shuffle мультимножества.
   if (!lastBoard) return []
-  const maxRepair = 2500
+  const maxRepair = 20
   for (let repair = 0; repair < maxRepair; repair += 1) {
-    const fixed = reshuffleBoardPreservingPieces(lastBoard, stoneHp, rng, 320)
+    const fixed = reshuffleBoardPreservingPieces(lastBoard, stoneHp, rng, 64)
     if (fixed) return fixed
   }
   return lastBoard
