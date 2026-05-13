@@ -147,9 +147,12 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
     lastUserSwap.value = null
     useMatch3StatsStore().noteLevelStarted()
     undoStack.value = []
-    boosterBomb.value = 3
-    boosterClock.value = 3
-    boosterStar.value = 3
+    const extra = useTutorial
+      ? { bomb: 0, clock: 0, star: 0 }
+      : useMatch3ProgressStore().pullBoostersForLevel()
+    boosterBomb.value = 3 + extra.bomb
+    boosterClock.value = 3 + extra.clock
+    boosterStar.value = 3 + extra.star
   }
 
   function pushUndoSnapshot() {

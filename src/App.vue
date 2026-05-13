@@ -625,6 +625,9 @@ body {
     var(--m3-card-purple-2) 100%
   );
 }
+.m3-card--amber {
+  background: linear-gradient(180deg, #ffe566 0%, #f0a020 100%);
+}
 .m3-card--red {
   background: linear-gradient(
     180deg,

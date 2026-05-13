@@ -7,6 +7,7 @@ import ProfilePage from '@/views/ProfilePage.vue'
 import SettingsPage from '@/views/SettingsPage.vue'
 import StatisticsPage from '@/views/StatisticsPage.vue'
 import HowToPlayPage from '@/views/HowToPlayPage.vue'
+import ShopPage from '@/views/ShopPage.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -19,6 +20,7 @@ const router = createRouter({
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/statistics', name: 'statistics', component: StatisticsPage },
     { path: '/how-to-play', name: 'how-to-play', component: HowToPlayPage },
+    { path: '/shop', name: 'shop', component: ShopPage },
     { path: '/:pathMatch(.*)*', redirect: { name: 'menu' } },
   ],
 })

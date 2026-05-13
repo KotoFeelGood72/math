@@ -13,6 +13,8 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
   const totalLevels = ref(TOTAL_LEVELS)
   const coins = ref(0)
   const tutorialDone = ref(false)
+  /** Запас бустеров из магазина; часть переносится на старт уровня (pullBoostersForLevel). */
+  const storedBoosters = ref({ bomb: 0, clock: 0, star: 0 })
 
   /** Обучение только при первом запуске; флаг хранится в облаке Я.Игр (`tutorialDone`). */
   const needsTutorial = computed(() => !tutorialDone.value)
@@ -65,11 +67,55 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     coins.value = Math.max(0, coins.value + (n | 0))
   }
 
+  const MAX_BOOSTERS_BRING_PER_LEVEL = 8
+
+  function clampBoosterCount(n) {
+    return Math.max(0, Math.min(999, n | 0))
+  }
+
+  function addStoredBooster(kind, n) {
+    const d = n | 0
+    if (d <= 0) return
+    const cur = storedBoosters.value
+    if (kind === 'bomb') {
+      storedBoosters.value = { ...cur, bomb: clampBoosterCount(cur.bomb + d) }
+    } else if (kind === 'clock') {
+      storedBoosters.value = { ...cur, clock: clampBoosterCount(cur.clock + d) }
+    } else if (kind === 'star') {
+      storedBoosters.value = { ...cur, star: clampBoosterCount(cur.star + d) }
+    }
+  }
+
+  /**
+   * Забрать часть запаса в текущую партию (вызывается из match3Game.startLevel).
+   * @returns {{ bomb: number, clock: number, star: number }}
+   */
+  function pullBoostersForLevel() {
+    const cur = storedBoosters.value
+    const bomb = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, cur.bomb | 0)
+    const clock = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, cur.clock | 0)
+    const star = Math.min(MAX_BOOSTERS_BRING_PER_LEVEL, cur.star | 0)
+    storedBoosters.value = {
+      bomb: clampBoosterCount(cur.bomb - bomb),
+      clock: clampBoosterCount(cur.clock - clock),
+      star: clampBoosterCount(cur.star - star),
+    }
+    return { bomb, clock, star }
+  }
+
+  function trySpendCoins(amount) {
+    const n = amount | 0
+    if (n <= 0 || coins.value < n) return false
+    coins.value -= n
+    return true
+  }
+
   function getSnapshot() {
     return {
       levels: JSON.parse(JSON.stringify(levels.value)),
       coins: coins.value,
       tutorialDone: tutorialDone.value,
+      storedBoosters: { ...storedBoosters.value },
     }
   }
 
@@ -91,6 +137,14 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     }
     if (typeof snap.coins === 'number' && Number.isFinite(snap.coins)) {
       coins.value = Math.max(0, snap.coins | 0)
+    }
+    if (snap.storedBoosters && typeof snap.storedBoosters === 'object') {
+      const sb = snap.storedBoosters
+      storedBoosters.value = {
+        bomb: clampBoosterCount(sb.bomb | 0),
+        clock: clampBoosterCount(sb.clock | 0),
+        star: clampBoosterCount(sb.star | 0),
+      }
     }
     const hadTutorialFlag = typeof snap.tutorialDone === 'boolean'
     if (hadTutorialFlag) {
@@ -118,12 +172,14 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     levels.value = {}
     coins.value = 0
     tutorialDone.value = false
+    storedBoosters.value = { bomb: 0, clock: 0, star: 0 }
   }
 
   return {
     levels,
     totalLevels,
     coins,
+    storedBoosters,
     tutorialDone,
     needsTutorial,
     highestUnlocked,
@@ -134,6 +190,9 @@ export const useMatch3ProgressStore = defineStore('match3-progress', () => {
     getLevel,
     recordResult,
     addCoins,
+    addStoredBooster,
+    pullBoostersForLevel,
+    trySpendCoins,
     getSnapshot,
     restoreSnapshot,
     markTutorialDone,

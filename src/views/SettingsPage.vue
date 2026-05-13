@@ -121,6 +121,24 @@
           <h2 class="settings__panel-title settings__panel-title--solo">
             Разделы
           </h2>
+          <button type="button" class="settings__link-row" @click="goLevels">
+            <span class="settings__link-text">
+              <span class="settings__link-label">Уровни</span>
+              <span class="settings__link-sub">{{ completedCount }} из {{ totalLevels }}</span>
+            </span>
+            <span class="settings__link-chevron" aria-hidden="true">
+              <Icon icon="mdi:chevron-right" />
+            </span>
+          </button>
+          <button type="button" class="settings__link-row" @click="goHowToPlay">
+            <span class="settings__link-text">
+              <span class="settings__link-label">Как играть</span>
+              <span class="settings__link-sub">Инструкция</span>
+            </span>
+            <span class="settings__link-chevron" aria-hidden="true">
+              <Icon icon="mdi:chevron-right" />
+            </span>
+          </button>
           <button
             type="button"
             class="settings__link-row"
@@ -193,6 +211,12 @@ function goBack() {
 }
 function goStatistics() {
   router.push({ name: 'statistics' })
+}
+function goLevels() {
+  router.push({ name: 'levels' })
+}
+function goHowToPlay() {
+  router.push({ name: 'how-to-play' })
 }
 function goProfile() {
   router.push({ name: 'profile' })
@@ -533,6 +557,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   font-size: 1.35rem;
   color: #c67612;
   font-weight: 900;
+}
+
+.settings__link-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  text-align: left;
+}
+
+.settings__link-sub {
+  font-size: 0.72rem;
+  font-weight: 650;
+  opacity: 0.88;
 }
 
 .settings__bottom-bar {

@@ -32,7 +32,7 @@ const props = defineProps({
   color: {
     type: String,
     default: 'orange',
-    validator: (v) => ['orange', 'purple', 'red', 'green'].includes(v),
+    validator: (v) => ['orange', 'purple', 'amber', 'red', 'green'].includes(v),
   },
 })
 
@@ -40,6 +40,7 @@ const attrs = useAttrs()
 
 const cardModifier = computed(() => {
   if (props.color === 'purple') return 'm3-card--purple'
+  if (props.color === 'amber') return 'm3-card--amber'
   if (props.color === 'red') return 'm3-card--red'
   if (props.color === 'green') return 'm3-card--green'
   return 'menu-card--orange'

@@ -13,12 +13,18 @@
             </span>
             {{ totalStars }}
           </span>
-          <span class="m3-top-pill" :title="`Монеты: ${coins}`">
+          <button
+            type="button"
+            class="m3-top-pill menu__coin-pill"
+            :title="`Монеты: ${coins}. Открыть магазин`"
+            aria-label="Магазин, монеты"
+            @click="goShop"
+          >
             <span class="m3-top-pill__icon m3-top-pill__icon--coin" aria-hidden="true">
               <Icon icon="mdi:cash" />
             </span>
             {{ coins }}
-          </span>
+          </button>
         </div>
       </header>
 
@@ -43,21 +49,12 @@
         />
 
         <MenuCardButton
-          color="purple"
-          icon="mdi:map-outline"
-          title="Уровни"
-          :subLabel="`${completedCount} из ${totalLevels}`"
-          actionLabel="ОТКРЫТЬ"
-          @click="goLevels"
-        />
-
-        <MenuCardButton
-          color="green"
-          icon="mdi:help-circle-outline"
-          title="Как играть"
-          subLabel="Инструкция"
-          actionLabel="ЧИТАТЬ"
-          @click="goHowToPlay"
+          color="amber"
+          icon="mdi:shopping-outline"
+          title="Магазин"
+          subLabel="Бустеры за монеты"
+          actionLabel="В МАГАЗИН"
+          @click="goShop"
         />
       </div>
     </div>
@@ -78,7 +75,7 @@ import { Icon } from "@iconify/vue";
 const router = useRouter();
 const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
 const progress = useMatch3ProgressStore();
-const { highestUnlocked, totalStars, totalLevels, completedCount, coins } = storeToRefs(progress);
+const { highestUnlocked, totalStars, coins } = storeToRefs(progress);
 
 const playLabel = computed(() => (progress.completedCount > 0 ? "Продолжить" : "Играть"));
 
@@ -87,11 +84,8 @@ function playNext() {
   const id = progress.needsTutorial ? 1 : highestUnlocked.value;
   router.push({ name: "play", params: { id } });
 }
-function goLevels() {
-  router.push({ name: "levels" });
-}
-function goHowToPlay() {
-  router.push({ name: "how-to-play" });
+function goShop() {
+  router.push({ name: "shop" });
 }
 function goSettings() {
   router.push({ name: "settings" });
@@ -153,6 +147,17 @@ function goSettings() {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+.menu__coin-pill {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.menu__coin-pill:active {
+  transform: translateY(1px);
 }
 
 .menu__logo-wrap {
