@@ -86,9 +86,10 @@
 <script setup>
 defineOptions({ name: 'LevelResultPage' })
 
-import { computed } from 'vue'
+import { computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
+import confetti from '@hiseb/confetti'
 import PhoneFrame from '@/components/PhoneFrame.vue'
 import { Icon } from '@iconify/vue'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
@@ -110,6 +111,33 @@ const bestScore = computed(() => {
   const lv = progress.getLevel(level.value)
   return Math.max(lv?.bestScore || 0, score.value)
 })
+
+function celebrationFxAllowed() {
+  if (typeof window === 'undefined') return false
+  return !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function fireWinConfetti() {
+  if (!celebrationFxAllowed()) return
+  const w = window.innerWidth
+  const h = window.innerHeight
+  confetti({
+    position: { x: w / 2, y: h * 0.28 },
+    count: 140,
+    size: 1.05,
+    velocity: 220,
+    fade: false,
+  })
+}
+
+watch(
+  result,
+  (r) => {
+    if (r !== 'won') return
+    nextTick(() => fireWinConfetti())
+  },
+  { immediate: true },
+)
 
 function retry() {
   router.replace({ name: 'play', params: { id: level.value } })

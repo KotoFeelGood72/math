@@ -1,5 +1,5 @@
 import { createRng } from './rng.js'
-import { generateBoard } from './match3Engine.js'
+import { generateBoard, hasAnyMove, findMatches } from './match3Engine.js'
 
 export const COLOR_PALETTE = [
   { id: 0, name: 'red', label: 'Красный', shape: 'circle', cssVar: '#ef4f4f' },
@@ -10,7 +10,7 @@ export const COLOR_PALETTE = [
   { id: 5, name: 'cyan', label: 'Бирюзовый', shape: 'star', cssVar: '#3fb6c8' },
 ]
 
-export const TOTAL_LEVELS = 30
+export const TOTAL_LEVELS = 130
 
 /** Все уровни используют одну канву; «дыры» задаются нулями в маске. */
 export const BOARD_CANVAS_SIZE = 6
@@ -381,7 +381,11 @@ export function getLevelConfig(level) {
   const colors = lv <= 6 ? 5 : 6
   const moves = clamp(28 - Math.floor((lv - 1) / 2), 16, 28)
   const activeCells = countActive(shape.mask)
-  const seed = lv * 9173 + 17
+  // Уровни 1–30: прежняя формула seed (совместимость). 31+: расширенный пул с сильнее разведёнными seed.
+  const seed =
+    lv <= 30
+      ? lv * 9173 + 17
+      : (lv * 9173 + 17 + ((lv * lv) >>> 0) % 1_000_003 + lv * 0x9e3779b1) >>> 0
   const stoneHpInitial = buildInitialStoneHp(rows, cols, shape.mask, seed, lv)
   const stonesTotalLayers = sumStoneHpGrid(stoneHpInitial)
 
@@ -457,12 +461,23 @@ export function getTutorialLevelConfig() {
 }
 
 export function buildLevelBoard(config) {
-  const rng = createRng(config.seed)
   if (config && Array.isArray(config.presetBoard) && config.presetBoard.length) {
     return config.presetBoard.map((row) => row.slice())
   }
   const stoneHp = config.stoneHpInitial ?? null
-  return generateBoard(config.rows, config.cols, config.colors, rng, config.mask, stoneHp)
+  const { rows, cols, colors, mask, seed } = config
+  // Для части масок/камней один seed даёт «тупик»; детерминированно перебираем skew.
+  const maxSkew = 640
+  for (let skew = 0; skew < maxSkew; skew += 1) {
+    const trySeed = (seed + skew * 0x7f4a7c15) >>> 0
+    const rng = createRng(trySeed)
+    const board = generateBoard(rows, cols, colors, rng, mask, stoneHp)
+    if (findMatches(board, stoneHp).length === 0 && hasAnyMove(board, stoneHp)) {
+      return board
+    }
+  }
+  const rng = createRng(seed)
+  return generateBoard(rows, cols, colors, rng, mask, stoneHp)
 }
 
 export function describeObjective(objective) {
