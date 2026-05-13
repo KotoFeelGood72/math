@@ -42,12 +42,19 @@
           v-for="cell in gridCells"
           :key="cell.index"
           class="shop__cell m3-modal-panel"
+          role="listitem"
         >
-          <div class="shop__sticker-wrap">
-            <img :src="cell.stickerUrl" alt="" class="shop__sticker" draggable="false" />
-          </div>
-          <h2 class="shop__cell-title">{{ cell.offer.title }}</h2>
-          <p class="shop__cell-hint">{{ cell.offer.hint }}</p>
+          <button
+            type="button"
+            class="shop__cell-tap"
+            :aria-label="`Подробнее: ${cell.offer.title}`"
+            @click="openShopDetail(cell.offer)"
+          >
+            <div class="shop__sticker-wrap">
+              <img :src="cell.stickerUrl" alt="" class="shop__sticker" draggable="false" />
+            </div>
+            <span class="shop__cell-title">{{ cell.offer.title }}</span>
+          </button>
           <div class="shop__cell-buy">
             <span class="shop__price">
               <Icon icon="mdi:cash" class="shop__price-ic" aria-hidden="true" />
@@ -57,6 +64,27 @@
           </div>
         </li>
       </ul>
+
+      <div
+        v-if="detailOffer"
+        class="m3-modal-overlay shop__detail-scrim"
+        role="presentation"
+        @click.self="closeShopDetail"
+      >
+        <div
+          class="m3-modal-panel shop__detail-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="shopDetailTitleId"
+          @click.stop
+        >
+          <h2 :id="shopDetailTitleId" class="shop__detail-title">{{ detailOffer.title }}</h2>
+          <p class="shop__detail-hint">{{ detailOffer.hint }}</p>
+          <MenuActionButton variant="hero" class="shop__detail-ok" @click="closeShopDetail">
+            Понятно
+          </MenuActionButton>
+        </div>
+      </div>
 
       <p v-if="toast" class="shop__toast" role="status">{{ toast }}</p>
 
@@ -103,6 +131,18 @@ const gridCells = computed(() =>
 const toast = ref('')
 let toastTimer = 0
 
+/** @type {import('vue').Ref<(typeof SHOP_OFFERS)[number] | null>} */
+const detailOffer = ref(null)
+const shopDetailTitleId = 'shop-offer-detail-title'
+
+function openShopDetail(offer) {
+  detailOffer.value = offer
+}
+
+function closeShopDetail() {
+  detailOffer.value = null
+}
+
 function showToast(msg) {
   toast.value = msg
   if (toastTimer) window.clearTimeout(toastTimer)
@@ -132,7 +172,13 @@ function goBack() {
 }
 
 function onEscape(e) {
-  if (e.key === 'Escape') goBack()
+  if (e.key !== 'Escape') return
+  if (detailOffer.value) {
+    e.preventDefault()
+    closeShopDetail()
+    return
+  }
+  goBack()
 }
 onMounted(() => window.addEventListener('keydown', onEscape))
 onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
@@ -246,12 +292,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.35rem;
+  gap: 0.4rem;
   padding: 0.55rem 0.5rem 0.58rem;
   min-height: 0;
 }
 
+.shop__cell-tap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 10px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shop__cell-tap:focus-visible {
+  outline: 2px solid rgba(110, 57, 17, 0.65);
+  outline-offset: 2px;
+}
+
+.shop__cell-tap:active .shop__sticker-wrap {
+  transform: scale(0.98);
+}
+
 .shop__sticker-wrap {
+  transition: transform 0.12s ease;
+}
   aspect-ratio: 1;
   width: 100%;
   border-radius: 12px;
