@@ -4,6 +4,7 @@
       <div
         ref="boardEl"
         class="m3board"
+        :class="{ 'm3board--booster-aim': boosterAim }"
         :style="boardStyle"
         role="grid"
         :aria-rowcount="rows"
@@ -20,8 +21,6 @@
             class="m3board__cell"
             :class="{
               'm3board__cell--hole': cell === BLOCKED,
-              'm3board__cell--booster-target':
-                boosterAim && cell !== BLOCKED && !hasStone(r, c),
             }"
             :data-m3-cell="`${r},${c}`"
             role="gridcell"
@@ -423,31 +422,8 @@ defineExpose({
   user-select: none;
 }
 
-/* Совпадает с границей «стеклянной» плитки .m3cell::before (inset 4%, radius 14%), без вылета за ячейку */
-.m3board__cell--booster-target::after {
-  content: '';
-  position: absolute;
-  inset: 4%;
-  border-radius: 14%;
-  box-sizing: border-box;
-  border: 2px solid rgba(255, 220, 100, 0.95);
-  pointer-events: none;
-  z-index: 4;
-  animation: m3cell-booster-ring 1.15s ease-in-out infinite;
-}
-
-@keyframes m3cell-booster-ring {
-  0%,
-  100% {
-    border-color: rgba(255, 210, 88, 0.92);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
-  }
-  50% {
-    border-color: rgba(255, 245, 170, 1);
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.45),
-      0 0 5px rgba(255, 195, 70, 0.45);
-  }
+.m3board--booster-aim {
+  cursor: pointer;
 }
 
 .m3board__cell {

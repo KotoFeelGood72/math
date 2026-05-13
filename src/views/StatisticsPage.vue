@@ -154,6 +154,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  justify-content: space-between;
 }
 
 /* Шапка — как на экране настроек */

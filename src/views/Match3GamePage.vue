@@ -45,13 +45,13 @@
         <div
           ref="goalsCardRef"
           class="play__hud-card play__hud-card--goals"
-          :class="{ 'play__hud-card--booster-mode': boosterNeedsBoardTap }"
         >
           <div
             v-if="boosterNeedsBoardTap"
             class="play__goals-booster-hint"
             role="status"
             aria-live="polite"
+            :title="boosterAimHintText"
           >
             <p class="play__goals-booster-hint-text">
               {{ boosterAimHintText }}
@@ -314,12 +314,6 @@
           </div>
         </div>
       </Teleport>
-
-      <footer class="play__foot">
-        <p v-if="status === 'won'" class="play__hint play__hint--ok">
-          Уровень пройден!
-        </p>
-      </footer>
 
       <div
         v-if="paused && status === 'playing'"
@@ -1527,29 +1521,30 @@ async function exitToMenu() {
   padding: 0.32rem 0.65rem 0;
 }
 
-.play__hud-card--booster-mode {
-  padding-top: 0.4rem;
-  padding-bottom: 0.42rem;
-}
-
 .play__goals-booster-hint {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.35rem;
-  padding: 0.15rem 0;
   box-sizing: border-box;
+  /* Высота как у ряда иконок цели (.play__goal-icon 1.45rem) */
+  min-height: 1.45rem;
+  max-height: 1.45rem;
+  padding: 0;
 }
 
 .play__goals-booster-hint-text {
   margin: 0;
   text-align: center;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 900;
-  line-height: 1.38;
+  line-height: 1.2;
   letter-spacing: 0.02em;
   color: var(--m3-text-on-wood);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   animation: play-booster-hint-in 0.26s ease-out;
 }
 
