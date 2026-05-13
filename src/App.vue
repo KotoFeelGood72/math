@@ -219,15 +219,77 @@ function isNodeVerticallyScrollable(node) {
   return false
 }
 
+/** Последняя clientY по активному касанию — для блока «pull» на границах скролла. */
+let lastTouchClientY = 0
+
+function syncLastTouchClientYFromEvent(e) {
+  if (e instanceof TouchEvent && e.touches.length === 1) {
+    lastTouchClientY = e.touches[0].clientY
+  }
+}
+
+/**
+ * Элемент с вертикальным скроллом внутри `[data-allow-browser-scroll]`
+ * (иначе жест у верхней границы уходит в pull-to-refresh браузера).
+ */
+function findVerticalScrollPortInDataAllowZone(target) {
+  if (!(target instanceof Element)) return null
+  const scope = target.closest('[data-allow-browser-scroll]')
+  if (!scope) return null
+  for (
+    let el = target;
+    el && scope.contains(el);
+    el = el.parentElement
+  ) {
+    if (!(el instanceof Element)) continue
+    const { overflowY } = window.getComputedStyle(el)
+    if (
+      overflowY === 'auto' ||
+      overflowY === 'scroll' ||
+      overflowY === 'overlay'
+    ) {
+      return el
+    }
+  }
+  return scope
+}
+
 function blockViewportTouchScroll(e) {
   if (!(e instanceof TouchEvent) || e.touches.length !== 1) return
   const { target } = e
   if (!(target instanceof Element)) return
-  if (
-    target.closest(
-      'input[type="range"], textarea, select, [data-allow-browser-scroll], .swiper',
-    )
-  ) {
+
+  const clientY = e.touches[0].clientY
+  const dy = clientY - lastTouchClientY
+  lastTouchClientY = clientY
+
+  if (target.closest('input[type="range"], textarea, select')) {
+    return
+  }
+
+  if (target.closest('[data-allow-browser-scroll]')) {
+    const scrollEl = findVerticalScrollPortInDataAllowZone(target)
+    if (!scrollEl) return
+    const canScrollY = scrollEl.scrollHeight > scrollEl.clientHeight + 1
+    if (!canScrollY) {
+      e.preventDefault()
+      return
+    }
+    if (scrollEl.scrollTop <= 0 && dy > 0) {
+      e.preventDefault()
+      return
+    }
+    if (
+      scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 1 &&
+      dy < 0
+    ) {
+      e.preventDefault()
+      return
+    }
+    return
+  }
+
+  if (target.closest('.swiper')) {
     return
   }
   if (isNodeVerticallyScrollable(target)) return
@@ -386,10 +448,18 @@ onMounted(() => {
     }
   }
 
+  document.addEventListener('touchstart', syncLastTouchClientYFromEvent, {
+    passive: true,
+    capture: true,
+  })
   document.addEventListener('touchmove', blockViewportTouchScroll, {
     passive: false,
   })
   detachViewportTouchGuards = () => {
+    document.removeEventListener('touchstart', syncLastTouchClientYFromEvent, {
+      passive: true,
+      capture: true,
+    })
     document.removeEventListener('touchmove', blockViewportTouchScroll, {
       passive: false,
     })
@@ -1120,7 +1190,11 @@ button.m3-top-pill {
      иначе нет pull-to-refresh; здесь явно разрешаем вертикальный пан, иначе
      контейнер не скроллится пальцем. */
   touch-action: pan-y;
-  overscroll-behavior: contain;
+  /* `contain` оставляет цепочку overscroll к вьюпорту в части мобильных браузеров
+     (pull-to-refresh «Перезагрузить»). `none` гасит передачу жеста наружу. */
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+  overscroll-behavior-x: none;
   -webkit-overflow-scrolling: touch;
   /* Firefox */
   scrollbar-width: thin;
@@ -1179,10 +1253,14 @@ button.m3-top-pill {
 .swiper.swiper-vertical,
 .swiper-vertical {
   touch-action: pan-y;
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
 }
 .swiper.swiper-horizontal,
 .swiper-horizontal {
   touch-action: pan-x;
+  overscroll-behavior: none;
+  overscroll-behavior-x: none;
 }
 
 .app-root input,
