@@ -1,62 +1,6 @@
 /**
- * Метаданные профиля: локальный демо-лидерборд (если не задан
- * `VITE_YANDEX_LEADERBOARD_NAME`) и список достижений.
+ * Метаданные профиля: форматирование очков и список достижений.
  */
-
-/** Фиксированные записи противников (очки «набранные ими»). */
-export const LEADERBOARD_BOT_ROWS = [
-  { id: 'b1', name: 'Карамелька', score: 512_400 },
-  { id: 'b2', name: 'Батончик_99', score: 445_200 },
-  { id: 'b3', name: 'Мармеладка', score: 398_100 },
-  { id: 'b4', name: 'Сахарок', score: 310_550 },
-  { id: 'b5', name: 'Драже7', score: 267_300 },
-  { id: 'b6', name: 'Леденец', score: 189_000 },
-  { id: 'b7', name: 'Конфеткин', score: 142_800 },
-  { id: 'b8', name: 'Ваниль', score: 95_400 },
-  { id: 'b9', name: 'Желейка', score: 42_100 },
-]
-
-/**
- * @param {string} playerDisplayName
- * @param {number} playerScore — берём из totalScore (очки всего).
- * @returns {{ rows: object[], topRows: object[], playerRank: number, totalPlayers: number, playerScore: number }}
- */
-export function buildLeaderboardTable(playerDisplayName, playerScore) {
-  const name =
-    typeof playerDisplayName === 'string' && playerDisplayName.trim()
-      ? playerDisplayName.trim()
-      : 'Вы'
-  const score = Math.max(0, playerScore | 0)
-
-  const rows = [
-    ...LEADERBOARD_BOT_ROWS.map((r) => ({
-      id: r.id,
-      name: r.name,
-      score: r.score,
-      isPlayer: false,
-    })),
-    {
-      id: 'player',
-      name,
-      score,
-      isPlayer: true,
-    },
-  ]
-
-  rows.sort((a, b) => b.score - a.score)
-  rows.forEach((r, i) => {
-    r.rank = i + 1
-  })
-
-  const playerRow = rows.find((r) => r.isPlayer)
-  return {
-    rows,
-    topRows: rows.slice(0, 10),
-    playerRank: playerRow?.rank ?? rows.length,
-    totalPlayers: rows.length,
-    playerScore: playerRow?.score ?? score,
-  }
-}
 
 export function formatLeaderboardScore(n) {
   return new Intl.NumberFormat('ru-RU').format(Math.max(0, n | 0))

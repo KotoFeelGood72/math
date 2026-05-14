@@ -167,23 +167,13 @@ async function devLbGetDescription(leaderboardName) {
       sort_order: 'DESC',
     },
     name,
-    title: { ru: 'Лидерборд (локальная подмена)' },
+    title: { ru: 'Рейтинг' },
   }
 }
 
 function createDevLeaderboards() {
-  /** Боты для демо-таблицы (как на экране профиля). */
-  const bots = [
-    { name: 'Карамелька', score: 512_400, id: 'b1' },
-    { name: 'Батончик_99', score: 445_200, id: 'b2' },
-    { name: 'Мармеладка', score: 398_100, id: 'b3' },
-    { name: 'Сахарок', score: 310_550, id: 'b4' },
-    { name: 'Драже7', score: 267_300, id: 'b5' },
-    { name: 'Леденец', score: 189_000, id: 'b6' },
-    { name: 'Конфеткин', score: 142_800, id: 'b7' },
-    { name: 'Ваниль', score: 95_400, id: 'b8' },
-    { name: 'Желейка', score: 42_100, id: 'b9' },
-  ]
+  /** Без фиктивных соперников — только сохранённый счёт локального игрока. */
+  const bots = []
 
   return {
     getDescription: devLbGetDescription,
@@ -264,12 +254,14 @@ function buildDevLeaderboardRows(leaderboardKey, bots) {
       score: b.score,
       uniqueID: `bot-${b.id}`,
     })),
-    {
+  ]
+  if (saved > 0) {
+    rows.push({
       name: 'Dev Игрок',
       score: saved,
       uniqueID: DEV_PLAYER_UNIQUE_ID,
-    },
-  ]
+    })
+  }
   rows.sort((a, b) => b.score - a.score)
   rows.forEach((r, i) => {
     r.rank = i + 1
