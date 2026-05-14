@@ -35,6 +35,7 @@ import { createRng } from '@/game/rng.js'
 import { inferClearFx } from '@/game/inferClearFx.js'
 import { useMatch3ProgressStore } from '@/stores/match3Progress.js'
 import { useMatch3StatsStore } from '@/stores/match3Stats.js'
+import { useYandexGamesStore } from '@/stores/yandexGames.js'
 
 const SWAP_INVALID_MS = 160
 const MATCH_FLASH_MS = 280
@@ -661,9 +662,10 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       (cfg.stonesTotalLayers ?? 0) <= 0 ||
       stoneProgress.value.remaining <= 0
 
-    let mainDone = false
-    if (obj.type === 'score') mainDone = score.value >= obj.target
-    else mainDone = collected.value >= obj.target
+    const mainDone =
+      obj.type === 'score'
+        ? score.value >= obj.target
+        : collected.value >= obj.target
 
     const won = stonesDone && mainDone
 
@@ -679,6 +681,7 @@ export const useMatch3GameStore = defineStore('match3-game', () => {
       coinsEarned.value = stars.value * 25 + Math.floor(score.value / 10)
       const stats = useMatch3StatsStore()
       stats.noteLevelWon(score.value)
+      void useYandexGamesStore().submitLeaderboardTotalScore(stats.totalScore)
       const progress = useMatch3ProgressStore()
       progress.recordResult(cfg.id, stars.value, score.value)
       progress.addCoins(coinsEarned.value)

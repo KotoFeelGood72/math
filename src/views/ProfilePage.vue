@@ -41,13 +41,52 @@
 
         <section class="prof__panel m3-modal-panel" aria-labelledby="prof-lb-h">
             <h2 id="prof-lb-h" class="prof__panel-title">Таблица лидеров</h2>
-            <p class="prof__rank-line">
-              Ваше место:
-              <strong class="prof__rank-num">{{ leaderboard.playerRank }}</strong>
-              из {{ leaderboard.totalPlayers }}
-              <span class="prof__rank-score">
-                · {{ formatLeaderboardScore(leaderboard.playerScore) }} очков
-              </span>
+            <p
+              v-if="leaderboard.source === 'loading'"
+              class="prof__rank-line"
+            >
+              Загрузка рейтинга Яндекс Игр…
+            </p>
+            <p v-else class="prof__rank-line">
+              <template v-if="leaderboard.source === 'demo'">
+                Ваше место:
+                <strong class="prof__rank-num">{{ leaderboard.playerRank }}</strong>
+                из {{ leaderboard.totalPlayers }}
+                <span class="prof__rank-score">
+                  · {{ formatLeaderboardScore(leaderboard.playerScore) }} очков
+                </span>
+              </template>
+              <template v-else-if="leaderboard.source === 'remote'">
+                <template v-if="leaderboard.playerRank > 0">
+                  Ваше место:
+                  <strong class="prof__rank-num">{{ leaderboard.playerRank }}</strong>
+                  <span class="prof__rank-score">
+                    · {{ formatLeaderboardScore(leaderboard.playerScore) }} очков
+                  </span>
+                </template>
+                <template v-else>
+                  В общем рейтинге место появится после сохранения результата
+                  (нужна авторизация в Яндексе). Локально набрано
+                  <strong class="prof__rank-num">{{
+                    formatLeaderboardScore(totalScore)
+                  }}</strong>
+                  очков.
+                </template>
+              </template>
+              <template v-else-if="leaderboard.source === 'remote_empty'">
+                Записей в лидерборде пока нет. Локально набрано
+                <strong class="prof__rank-num">{{
+                  formatLeaderboardScore(totalScore)
+                }}</strong>
+                очков.
+              </template>
+              <template v-else>
+                Не удалось загрузить рейтинг Яндекс Игр. Ниже — локальная
+                демо-таблица.
+                <span class="prof__rank-score">
+                  Очков всего: {{ formatLeaderboardScore(totalScore) }}
+                </span>
+              </template>
             </p>
             <div class="prof__table-wrap" role="region" aria-label="Топ по очкам">
               <table class="prof__lb-table">
@@ -59,22 +98,26 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    v-for="row in leaderboard.topRows"
-                    :key="row.id"
-                    :class="{ 'prof__lb-tr--me': row.isPlayer }"
-                  >
-                    <td>{{ row.rank }}</td>
-                    <td>{{ row.name }}</td>
-                    <td>{{ formatLeaderboardScore(row.score) }}</td>
+                  <tr v-if="leaderboard.topRows.length === 0">
+                    <td colspan="3" class="prof__lb-empty">
+                      Пока нет записей в лидерборде.
+                    </td>
                   </tr>
+                  <template v-else>
+                    <tr
+                      v-for="row in leaderboard.topRows"
+                      :key="row.id"
+                      :class="{ 'prof__lb-tr--me': row.isPlayer }"
+                    >
+                      <td>{{ row.rank }}</td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ formatLbCellScore(row) }}</td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </div>
-            <p class="prof__lb-note">
-              Сравнение по сумме очков за всё время. Демо-список соперников; позже можно
-              подключить общий рейтинг.
-            </p>
+            <p class="prof__lb-note">{{ leaderboardFootnote }}</p>
           </section>
 
         <section class="prof__panel m3-modal-panel" aria-labelledby="prof-ach-h">
@@ -126,6 +169,7 @@ import { Icon } from '@iconify/vue'
 import { useMatch3ProgressStore } from '@/stores/match3Progress'
 import { useMatch3StatsStore } from '@/stores/match3Stats'
 import { useYandexGamesStore } from '@/stores/yandexGames'
+import { getYandexLeaderboardName } from '@/yandex/yandexLeaderboardConfig.js'
 import {
   buildAchievements,
   buildLeaderboardTable,
@@ -155,9 +199,86 @@ const {
 
 const playerLabel = ref('Вы')
 
-const leaderboard = computed(() =>
-  buildLeaderboardTable(playerLabel.value, totalScore.value),
+const remoteLeaderboardPanel = ref(null)
+
+const leaderboardLoadState = ref(
+  getYandexLeaderboardName() ? 'loading' : 'idle',
 )
+
+const leaderboard = computed(() => {
+  const name = getYandexLeaderboardName()
+  const panel = remoteLeaderboardPanel.value
+
+  if (!name) {
+    const demo = buildLeaderboardTable(playerLabel.value, totalScore.value)
+    return { source: 'demo', ...demo }
+  }
+
+  if (leaderboardLoadState.value === 'loading') {
+    return {
+      source: 'loading',
+      topRows: [],
+      playerRank: 0,
+      totalPlayers: 0,
+      playerScore: totalScore.value,
+    }
+  }
+
+  if (panel?.source === 'remote' && panel.topRows.length > 0) {
+    return {
+      source: 'remote',
+      topRows: panel.topRows,
+      playerRank: panel.playerRank,
+      playerScore:
+        panel.playerScore > 0 ? panel.playerScore : totalScore.value,
+      totalPlayers: null,
+    }
+  }
+
+  if (panel?.source === 'remote' && panel.topRows.length === 0) {
+    return {
+      source: 'remote_empty',
+      topRows: [],
+      playerRank: panel.playerRank,
+      playerScore: totalScore.value,
+      totalPlayers: null,
+    }
+  }
+
+  if (panel?.source === 'error') {
+    return {
+      source: 'error',
+      ...buildLeaderboardTable(playerLabel.value, totalScore.value),
+    }
+  }
+
+  const demo = buildLeaderboardTable(playerLabel.value, totalScore.value)
+  return { source: 'demo', ...demo }
+})
+
+const leaderboardFootnote = computed(() => {
+  const src = leaderboard.value.source
+  if (src === 'remote') {
+    return 'Общий рейтинг Яндекс Игр (лидерборд в консоли разработчика). Счёт обновляется после победы на уровне.'
+  }
+  if (src === 'remote_empty') {
+    return 'Лидерборд подключён, но записей пока нет. Пройдите уровень с авторизацией в Яндексе, чтобы отправить счёт.'
+  }
+  if (src === 'error') {
+    return 'Проверьте VITE_YANDEX_LEADERBOARD_NAME и поле «Техническое название лидерборда» в консоли (ошибка 404 при несовпадении).'
+  }
+  if (getYandexLeaderboardName()) {
+    return 'Сравнение по сумме очков за всё время.'
+  }
+  return 'Локальная демо-таблица. Для общего рейтинга задайте VITE_YANDEX_LEADERBOARD_NAME и создайте лидерборд в консоли Яндекс Игр.'
+})
+
+function formatLbCellScore(row) {
+  if (row && typeof row.formattedScore === 'string' && row.formattedScore.trim()) {
+    return row.formattedScore.trim()
+  }
+  return formatLeaderboardScore(row?.score ?? 0)
+}
 
 const achievements = computed(() =>
   buildAchievements({
@@ -187,20 +308,28 @@ onMounted(async () => {
   window.addEventListener('keydown', onEscape)
   try {
     const p = await yandexGames.ensurePlayer()
-    if (!p) return
-    if (typeof p.getName === 'function') {
-      const raw = await Promise.resolve(p.getName())
-      const n = raw != null ? String(raw).trim() : ''
-      if (n) {
-        playerLabel.value = n.slice(0, 40)
+    if (p) {
+      if (typeof p.getName === 'function') {
+        const raw = await Promise.resolve(p.getName())
+        const n = raw != null ? String(raw).trim() : ''
+        if (n) {
+          playerLabel.value = n.slice(0, 40)
+        }
+      } else if (typeof p.name === 'string' && p.name.trim()) {
+        playerLabel.value = p.name.trim().slice(0, 40)
       }
-      return
-    }
-    if (typeof p.name === 'string' && p.name.trim()) {
-      playerLabel.value = p.name.trim().slice(0, 40)
     }
   } catch {
     /* локальный запуск или нет прав — остаётся «Вы» */
+  }
+
+  const lbName = getYandexLeaderboardName()
+  if (!lbName) return
+  leaderboardLoadState.value = 'loading'
+  try {
+    remoteLeaderboardPanel.value = await yandexGames.fetchLeaderboardPanel()
+  } finally {
+    leaderboardLoadState.value = 'done'
   }
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
@@ -462,6 +591,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
   line-height: 1.45;
   color: #6e3911;
   opacity: 0.82;
+}
+
+.prof__lb-empty {
+  text-align: center;
+  font-weight: 700;
+  color: #6e3911;
+  opacity: 0.85;
+  padding: 0.65rem 0.5rem;
 }
 
 .prof__ach-list {

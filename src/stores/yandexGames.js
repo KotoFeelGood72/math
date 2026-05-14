@@ -1,6 +1,13 @@
 import { defineStore } from 'pinia'
 import { storeToRefs } from 'pinia'
 import { initYandexGamesSdk } from '@/yandex/yandexSdkInit.js'
+import { getYandexLeaderboardName } from '@/yandex/yandexLeaderboardConfig.js'
+import {
+  fetchLeaderboardEntries,
+  hasLeaderboardsApi,
+  mapLeaderboardEntryToRow,
+  submitLeaderboardScore,
+} from '@/yandex/yandexLeaderboardApi.js'
 import {
   acquireAudioFocusLock,
   releaseAudioFocusLock,
@@ -75,6 +82,12 @@ function sanitizeStatsPayload(input) {
   }
   return touched ? out : null
 }
+
+/** Лимит SDK: не чаще 1 раза в секунду (см. доку лидербордов). */
+const LEADERBOARD_SET_SCORE_MIN_INTERVAL_MS = 1100
+
+let _leaderboardLastSetScoreAt = 0
+let _leaderboardLastSentScore = -1
 
 export const useYandexGamesStore = defineStore('yandexGames', {
   state: () => ({
@@ -488,6 +501,96 @@ export const useYandexGamesStore = defineStore('yandexGames', {
       } catch {
         /* ignore */
       }
+    },
+    /**
+     * Загрузка топа и окрестности игрока для экрана профиля.
+     * @returns {Promise<{
+     *   source: 'remote'|'none'|'error',
+     *   topRows: { id: string, name: string, score: number, rank: number, isPlayer: boolean, formattedScore: string }[],
+     *   playerRank: number,
+     *   playerScore: number,
+     *   totalPlayers: null,
+     * }>}
+     */
+    async fetchLeaderboardPanel() {
+      const name = getYandexLeaderboardName()
+      const ysdk = this.ysdk
+      if (!name || !hasLeaderboardsApi(ysdk)) {
+        return {
+          source: 'none',
+          topRows: [],
+          playerRank: 0,
+          playerScore: 0,
+          totalPlayers: null,
+        }
+      }
+      let myId = ''
+      try {
+        const p = await this.ensurePlayer()
+        if (p && typeof p.getUniqueID === 'function') {
+          myId = String(p.getUniqueID() || '')
+        }
+      } catch {
+        /* без игрока всё равно можно показать топ */
+      }
+      const data = await fetchLeaderboardEntries(ysdk, name)
+      if (!data || !Array.isArray(data.entries)) {
+        return {
+          source: 'error',
+          topRows: [],
+          playerRank: 0,
+          playerScore: 0,
+          totalPlayers: null,
+        }
+      }
+      const topRows = data.entries.map((e) =>
+        mapLeaderboardEntryToRow(e, myId),
+      )
+      const playerRank = Math.max(0, Number(data.userRank) || 0)
+      const mine = topRows.find((r) => r.isPlayer)
+      const playerScore = mine ? mine.score : 0
+      return {
+        source: 'remote',
+        topRows,
+        playerRank,
+        playerScore,
+        totalPlayers: null,
+      }
+    },
+    /**
+     * Отправка суммарного счёта в лидерборд Яндекс Игр (только авторизованный игрок).
+     * @param {number} totalScore
+     */
+    async submitLeaderboardTotalScore(totalScore) {
+      const name = getYandexLeaderboardName()
+      const ysdk = this.ysdk
+      if (!name || !hasLeaderboardsApi(ysdk)) return false
+      const player = await this.ensurePlayer()
+      if (!player || typeof player.isAuthorized !== 'function') return false
+      try {
+        if (!player.isAuthorized()) return false
+      } catch {
+        return false
+      }
+      const score = Math.max(0, Math.floor(Number(totalScore) || 0))
+      const now =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now()
+      if (
+        now - _leaderboardLastSetScoreAt < LEADERBOARD_SET_SCORE_MIN_INTERVAL_MS
+      ) {
+        return false
+      }
+      if (score === _leaderboardLastSentScore) {
+        return true
+      }
+      const ok = await submitLeaderboardScore(ysdk, name, score)
+      if (ok) {
+        _leaderboardLastSetScoreAt = now
+        _leaderboardLastSentScore = score
+      }
+      return ok
     },
   },
 })

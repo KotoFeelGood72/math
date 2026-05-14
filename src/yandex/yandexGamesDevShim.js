@@ -18,10 +18,15 @@
  *   - failNextSetStats           : следующий `setStats` упадёт
  *   - failNextIncrementStats     : следующий `incrementStats` упадёт
  *   - flags                      : `Record<string, string>` для `ysdk.getFlags(defaults?)`
+ *   - failNextLeaderboardSetScore: следующий `leaderboards.setScore` упадёт
  */
 
 const DEV_PLAYER_STORAGE_KEY = 'yandexGamesDevShim:playerData:v1'
 const DEV_STATS_STORAGE_KEY = 'yandexGamesDevShim:playerStats:v1'
+const DEV_LB_SCORES_KEY = 'yandexGamesDevShim:leaderboardScores:v1'
+
+/** Стабильный id «авторизованного» игрока в локальной подмене (лидерборды). */
+const DEV_PLAYER_UNIQUE_ID = 'dev-yandex-player-1'
 
 const SUPPORTED_LANGS = ['ru', 'en', 'tr', 'be', 'kk', 'uk', 'uz', 'es', 'pt', 'de', 'fr', 'ar', 'id', 'ja', 'it', 'hy', 'he']
 
@@ -54,6 +59,7 @@ const DEFAULTS = {
   failNextGetStats: false,
   failNextSetStats: false,
   failNextIncrementStats: false,
+  failNextLeaderboardSetScore: false,
   flags: {},
   /** Переопределяется автоматически из `?lang=`/`?tld=` при первой инициализации. */
   lang: 'ru',
@@ -106,8 +112,176 @@ function writeStore(key, data) {
   }
 }
 
+function readLeaderboardScores() {
+  const o = readStore(DEV_LB_SCORES_KEY)
+  return o && typeof o === 'object' ? o : {}
+}
+
+function writeLeaderboardScores(data) {
+  writeStore(DEV_LB_SCORES_KEY, data)
+}
+
+/**
+ * @param {number} rank
+ * @param {string} publicName
+ * @param {string} uniqueID
+ * @param {number} score
+ */
+function devLeaderboardEntry(rank, publicName, uniqueID, score) {
+  const s = Math.max(0, Math.floor(Number(score) || 0))
+  return {
+    rank,
+    score: s,
+    formattedScore: new Intl.NumberFormat('ru-RU').format(s),
+    extraData: '',
+    player: {
+      lang: 'ru',
+      publicName,
+      uniqueID,
+      scopePermissions: {
+        avatar: 'allowed',
+        public_name: 'allowed',
+      },
+      getAvatarSrc: () => '',
+      getAvatarSrcSet: () => '',
+    },
+  }
+}
+
+/**
+ * @param {string} leaderboardName
+ */
+async function devLbGetDescription(leaderboardName) {
+  await delay(getNumber('latencyMs', DEFAULTS.latencyMs))
+  const name =
+    typeof leaderboardName === 'string' && leaderboardName.trim()
+      ? leaderboardName.trim()
+      : 'dev'
+  return {
+    appID: 'dev',
+    default: true,
+    description: {
+      invert_sort_order: false,
+      score_format: { options: { decimal_offset: 0 } },
+      type: 'numeric',
+      sort_order: 'DESC',
+    },
+    name,
+    title: { ru: 'Лидерборд (локальная подмена)' },
+  }
+}
+
+function createDevLeaderboards() {
+  /** Боты для демо-таблицы (как на экране профиля). */
+  const bots = [
+    { name: 'Карамелька', score: 512_400, id: 'b1' },
+    { name: 'Батончик_99', score: 445_200, id: 'b2' },
+    { name: 'Мармеладка', score: 398_100, id: 'b3' },
+    { name: 'Сахарок', score: 310_550, id: 'b4' },
+    { name: 'Драже7', score: 267_300, id: 'b5' },
+    { name: 'Леденец', score: 189_000, id: 'b6' },
+    { name: 'Конфеткин', score: 142_800, id: 'b7' },
+    { name: 'Ваниль', score: 95_400, id: 'b8' },
+    { name: 'Желейка', score: 42_100, id: 'b9' },
+  ]
+
+  return {
+    getDescription: devLbGetDescription,
+    async setScore(leaderboardName, score) {
+      await delay(getNumber('latencyMs', DEFAULTS.latencyMs))
+      if (consumeFailFlag('failNextLeaderboardSetScore')) {
+        throw new Error('[dev-shim] forced failNextLeaderboardSetScore')
+      }
+      const key =
+        typeof leaderboardName === 'string' && leaderboardName.trim()
+          ? leaderboardName.trim()
+          : 'default'
+      const v = Math.max(0, Math.floor(Number(score) || 0))
+      const all = { ...readLeaderboardScores(), [key]: v }
+      writeLeaderboardScores(all)
+    },
+    async getPlayerEntry(leaderboardName) {
+      await delay(getNumber('latencyMs', DEFAULTS.latencyMs))
+      const key =
+        typeof leaderboardName === 'string' && leaderboardName.trim()
+          ? leaderboardName.trim()
+          : 'default'
+      const raw = readLeaderboardScores()[key]
+      const v = Math.max(0, Math.floor(Number(raw) || 0))
+      if (v <= 0) {
+        const err = new Error('LEADERBOARD_PLAYER_NOT_PRESENT')
+        err.code = 'LEADERBOARD_PLAYER_NOT_PRESENT'
+        throw err
+      }
+      const sorted = buildDevLeaderboardRows(key, bots)
+      const mine = sorted.find((r) => r.uniqueID === DEV_PLAYER_UNIQUE_ID)
+      const rank = mine ? mine.rank : sorted.length
+      return devLeaderboardEntry(rank, 'Dev Игрок', DEV_PLAYER_UNIQUE_ID, v)
+    },
+    /**
+     * @param {string} leaderboardName
+     * @param {{ quantityTop?: number; includeUser?: boolean; quantityAround?: number }} [opts]
+     */
+    async getEntries(leaderboardName, opts) {
+      await delay(getNumber('latencyMs', DEFAULTS.latencyMs))
+      const key =
+        typeof leaderboardName === 'string' && leaderboardName.trim()
+          ? leaderboardName.trim()
+          : 'default'
+      const quantityTop = Math.min(
+        20,
+        Math.max(1, Number(opts?.quantityTop) || 10),
+      )
+      const sorted = buildDevLeaderboardRows(key, bots)
+      const slice = sorted.slice(0, quantityTop)
+      const mine = sorted.find((r) => r.uniqueID === DEV_PLAYER_UNIQUE_ID)
+      const userRank = mine ? mine.rank : 0
+      const entries = slice.map((r) =>
+        devLeaderboardEntry(r.rank, r.name, r.uniqueID, r.score),
+      )
+      return {
+        entries,
+        userRank,
+        ranges: [{ start: 0, size: entries.length }],
+        leaderboard: await devLbGetDescription(key),
+      }
+    },
+  }
+}
+
+/**
+ * @param {string} leaderboardKey
+ * @param {{ name: string; score: number; id: string }[]} bots
+ */
+function buildDevLeaderboardRows(leaderboardKey, bots) {
+  const saved = Math.max(
+    0,
+    Math.floor(Number(readLeaderboardScores()[leaderboardKey]) || 0),
+  )
+  const rows = [
+    ...bots.map((b) => ({
+      name: b.name,
+      score: b.score,
+      uniqueID: `bot-${b.id}`,
+    })),
+    {
+      name: 'Dev Игрок',
+      score: saved,
+      uniqueID: DEV_PLAYER_UNIQUE_ID,
+    },
+  ]
+  rows.sort((a, b) => b.score - a.score)
+  rows.forEach((r, i) => {
+    r.rank = i + 1
+  })
+  return rows
+}
+
 function createDevPlayer() {
   return {
+    isAuthorized: () => true,
+    getUniqueID: () => DEV_PLAYER_UNIQUE_ID,
+    getName: () => 'Dev Игрок',
     /** @param {string[]} [keys] */
     async getData(keys) {
       await delay(getNumber('latencyMs', DEFAULTS.latencyMs))
@@ -182,9 +356,18 @@ function createDevPlayer() {
 
 function createDevYsdk() {
   const s = shim()
+  const leaderboards = createDevLeaderboards()
   return {
     environment: { i18n: { lang: s.lang || 'ru', tld: s.tld || 'ru' } },
     getPlayer: async () => createDevPlayer(),
+    /**
+     * @param {string} [_method]
+     */
+    async isAvailableMethod(_method) {
+      await delay(0)
+      return true
+    },
+    leaderboards,
     /**
      * @param {{ defaultFlags?: Record<string, string> } | undefined} opts
      */

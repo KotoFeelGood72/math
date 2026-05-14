@@ -40,8 +40,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      proxy: {
-        ...(devAssetsProxyTarget
+      proxy: (devAssetsProxyTarget
           ? {
               '/__dev-assets': {
                 target: devAssetsProxyTarget,
@@ -51,7 +50,6 @@ export default defineConfig(({ mode }) => {
               },
             }
           : {}),
-      },
     },
   }
 })
